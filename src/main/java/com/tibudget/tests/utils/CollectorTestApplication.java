@@ -3,21 +3,40 @@ package com.tibudget.tests.utils;
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.ServiceLoader;
 
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JProgressBar;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.LayoutStyle.ComponentPlacement;
-import javax.swing.JProgressBar;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
-public class CollectorTesterApplication {
+import com.tibudget.api.ICollectorPlugin;
+
+public class CollectorTestApplication {
 
 	private JFrame frmTibudgetTestApplication;
 	private JTable accountsTable;
 	private JTable operationsTable;
+	private JTextArea console;
+	private JButton btnOpen;
+	private JButton btnReload;
+	private JButton btnSettings;
+	private JButton btnRun;
+	private JProgressBar progressBar;
+
+	private File pluginArchive;
+
+	private ServiceLoader<ICollectorPlugin> pluginLoader;
 
 	/**
 	 * Launch the application.
@@ -26,7 +45,7 @@ public class CollectorTesterApplication {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
-					CollectorTesterApplication window = new CollectorTesterApplication();
+					CollectorTestApplication window = new CollectorTestApplication();
 					window.frmTibudgetTestApplication.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -38,7 +57,7 @@ public class CollectorTesterApplication {
 	/**
 	 * Create the application.
 	 */
-	public CollectorTesterApplication() {
+	public CollectorTestApplication() {
 		initialize();
 	}
 
@@ -51,28 +70,38 @@ public class CollectorTesterApplication {
 		frmTibudgetTestApplication.setBounds(100, 100, 450, 300);
 		frmTibudgetTestApplication.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
-		JTextArea console = new JTextArea();
+		console = new JTextArea();
 		
-		JButton btnOpen = new JButton("Open");
+		btnOpen = new JButton("Open");
+		btnOpen.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				btnOpenActionPerformed(e);
+			}
+		});
 		
-		JButton btnReload = new JButton("Reload");
+		btnReload = new JButton("Reload");
 		btnReload.setEnabled(false);
 		btnReload.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 			}
 		});
 		
-		JButton btnSettings = new JButton("Settings");
+		btnSettings = new JButton("Settings");
+		btnSettings.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				btnSettingsActionPerformed(e);
+			}
+		});
 		btnSettings.setEnabled(false);
 		
 		accountsTable = new JTable();
 		
 		operationsTable = new JTable();
 		
-		JButton btnRun = new JButton("Run");
+		btnRun = new JButton("Run");
 		btnRun.setEnabled(false);
 		
-		JProgressBar progressBar = new JProgressBar();
+		progressBar = new JProgressBar();
 		GroupLayout groupLayout = new GroupLayout(frmTibudgetTestApplication.getContentPane());
 		groupLayout.setHorizontalGroup(
 			groupLayout.createParallelGroup(Alignment.LEADING)
@@ -115,5 +144,47 @@ public class CollectorTesterApplication {
 					.addContainerGap())
 		);
 		frmTibudgetTestApplication.getContentPane().setLayout(groupLayout);
+	}
+
+	private void btnOpenActionPerformed(ActionEvent evt) {
+		JFileChooser chooser = new JFileChooser();
+		FileNameExtensionFilter filter = new FileNameExtensionFilter("Jar files", "jar");
+		chooser.setFileFilter(filter);
+		chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+		int returnVal = chooser.showOpenDialog(frmTibudgetTestApplication);
+		if (returnVal == JFileChooser.APPROVE_OPTION) {
+			loadPlugin(chooser.getSelectedFile());
+		}
+	}
+	
+	private void btnSettingsActionPerformed(java.awt.event.ActionEvent evt) {
+		CollectorSettingsDialog settingsDialog = new CollectorSettingsDialog(frmTibudgetTestApplication, true);
+		settingsDialog.setVisible(true);
+	}
+
+	private boolean loadPlugin(File archive) {
+		boolean isValid = true;
+		if (isValid) {
+			pluginArchive = archive;
+
+			// Enable / disable UI elements
+			btnReload.setEnabled(false);
+			btnRun.setEnabled(false);
+			btnSettings.setEnabled(true);
+
+			// Clear console
+			console.setText("");
+		}
+		return isValid;
+	}
+
+	public ICollectorPlugin getInstance() throws MalformedURLException {
+		pluginLoader = ServiceLoader.load(ICollectorPlugin.class, getPluginClassLoader());
+		return pluginLoader.iterator().next();
+	}
+
+	public URLClassLoader getPluginClassLoader() throws MalformedURLException {
+		URLClassLoader classLoader = new URLClassLoader(new URL[]{pluginArchive.toURI().toURL()}, this.getClass().getClassLoader());
+		return classLoader;
 	}
 }
