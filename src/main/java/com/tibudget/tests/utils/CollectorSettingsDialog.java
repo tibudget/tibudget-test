@@ -1,11 +1,13 @@
 package com.tibudget.tests.utils;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.GridLayout;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -22,7 +24,13 @@ import org.slf4j.LoggerFactory;
 
 import com.tibudget.api.ICollectorPlugin;
 import com.tibudget.api.Input;
+import com.tibudget.api.exceptions.AccessDeny;
+import com.tibudget.api.exceptions.CollectError;
+import com.tibudget.api.exceptions.ConnectionFailure;
+import com.tibudget.api.exceptions.ParameterError;
+import com.tibudget.api.exceptions.TemporaryUnavailable;
 import com.tibudget.dto.BankAccountDto;
+import com.tibudget.dto.BankOperationDto;
 import com.tibudget.dto.MessageDto;
 import com.tibudget.dto.MessagesDto;
 
@@ -43,12 +51,12 @@ public class CollectorSettingsDialog extends javax.swing.JDialog {
 
 	private static class InputElement implements Comparable<InputElement> {
 		int order = -1;
-		String html;
+		Component component;
 
-		public InputElement(int order, String html) {
+		public InputElement(int order, Component component) {
 			super();
 			this.order = order;
-			this.html = html;
+			this.component = component;
 		}
 
 		@Override
@@ -60,8 +68,8 @@ public class CollectorSettingsDialog extends javax.swing.JDialog {
 			return this.order;
 		}
 
-		public String getHtml() {
-			return this.html;
+		public Component getComponent() {
+			return this.component;
 		}
 	}
 
@@ -127,6 +135,47 @@ public class CollectorSettingsDialog extends javax.swing.JDialog {
 		super(parent, modal);
 
 		initComponents();
+		
+		Component form = generateForm("foo", new ICollectorPlugin() {
+			@Input(required=true)
+			private boolean enabled;
+			
+			@Input(required=true)
+			private char separator;
+
+			@Override
+			public Collection<MessageDto> validate() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+			@Override
+			public int getProgress() {
+				// TODO Auto-generated method stub
+				return 0;
+			}
+			
+			@Override
+			public Iterable<BankOperationDto> getBankOperations() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+			@Override
+			public Iterable<BankAccountDto> getBankAccounts() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+			@Override
+			public void collect(Iterable<BankAccountDto> existingBankAccounts)
+					throws CollectError, AccessDeny, TemporaryUnavailable,
+					ConnectionFailure, ParameterError {
+				// TODO Auto-generated method stub
+				
+			}
+		}, ResourceBundle.getBundle("messages"), new MessagesDto(), Collections.<BankAccountDto>emptyList());
+		this.add(form, 1);
 
 		// setLocationRelativeTo must be called only AFTER setting your dialog
 		// size, or the dialog will appear with its top left corner centered on
@@ -208,58 +257,63 @@ public class CollectorSettingsDialog extends javax.swing.JDialog {
 	//GEN-END:initComponents
 
 	/**
-	 * @param args the command line arguments
+	 * @param args
+	 *            the command line arguments
 	 */
 	public static void main(String args[]) {
 		java.awt.EventQueue.invokeLater(new Runnable() {
 			public void run() {
-				CollectorSettingsDialog dialog = new CollectorSettingsDialog(new javax.swing.JFrame(), true);
-				dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-					public void windowClosing(java.awt.event.WindowEvent e) {
-						System.exit(0);
-					}
-				});
-				dialog.setVisible(true);
+				try {
+					CollectorSettingsDialog dialog = new CollectorSettingsDialog( new javax.swing.JFrame(), true);
+					dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+						public void windowClosing(java.awt.event.WindowEvent e) {
+							System.exit(0);
+						}
+					});
+					dialog.setVisible(true);
+				} finally {
+					System.exit(0);
+				}
 			}
 		});
 	}
 
-	public static StringBuffer generateHtmlForm(String id, ICollectorPlugin collector, ResourceBundle bundle, MessagesDto messages,
+	public static Component generateForm(String id, ICollectorPlugin collector, ResourceBundle bundle, MessagesDto messages,
 			List<BankAccountDto> accounts) {
-		StringBuffer buffer = new StringBuffer("<input type=\"hidden\" name=\"_id\" value=\"");
-		buffer.append(id);
-		buffer.append("\"/>");
+		JPanel formPanel = new JPanel(new BorderLayout());
 		Map<String, Fieldset> fieldsets = new HashMap<String, Fieldset>();
 		for (Field field : collector.getClass().getDeclaredFields()) {
 			Input inputAnnotation = field.getAnnotation(Input.class);
 			if (inputAnnotation != null) {
-				String html;
+				Component component = null;
 				if (field.getType().isEnum()) {
-					html = generateInputEnum(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
+					generateInputEnum(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == int.class) {
-					html = generateInputInt(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					generateInputInt(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == boolean.class) {
-					html = generateInputBoolean(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
+					generateInputBoolean(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == String.class) {
-					html = generateInputString(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					generateInputString(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == char.class) {
-					html = "";
-					//html = generateInputChar(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					component = generateInputChar(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == File.class) {
-					html = generateInputFile(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					generateInputFile(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == BankAccountDto.class) {
-					html = generateInputBankAccount(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()), accounts);
+					generateInputBankAccount(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()), accounts);
 				} else {
 					continue;
 				}
-				Fieldset fieldset = getOrCreate(fieldsets, inputAnnotation.fieldset());
-				fieldset.getElements().add(new InputElement(inputAnnotation.order(), html));
+				if (component != null) {
+					Fieldset fieldset = getOrCreate(fieldsets, inputAnnotation.fieldset());
+					fieldset.getElements().add(new InputElement(inputAnnotation.order(), component));
+				}
 			}
 		}
 		List<Fieldset> fsList = new ArrayList<Fieldset>(fieldsets.values());
 		Collections.sort(fsList);
 		for (Fieldset fieldset : fsList) {
 			if (fieldset.getElements().size() > 0) {
+				JPanel fieldsetPanel = new JPanel(new BorderLayout());
 				if (fieldset.getName().length() > 0) {
 					String title = null;
 					try {
@@ -267,28 +321,21 @@ public class CollectorSettingsDialog extends javax.swing.JDialog {
 					} catch (MissingResourceException e) {
 						// Ignore
 					}
-					buffer.append("<fieldset id =\"idfs");
-					buffer.append(normalizeFieldsetName(fieldset.getName()));
-					if (!fieldset.isDisplayed()) {
-						buffer.append("\" style=\"display:none");
-					}
-					buffer.append("\">");
+					fieldsetPanel.setVisible(fieldset.isDisplayed());
 					if (title != null && title.length() > 0) {
-						buffer.append("<legend>");
-						buffer.append(getMessage(bundle, "form.fieldset." + fieldset.getName()));
-						buffer.append("</legend>");
+						fieldsetPanel.add(new JLabel(title));
 					}
 				}
 				Collections.sort(fieldset.getElements());
 				for (InputElement inputElement : fieldset.getElements()) {
-					buffer.append(inputElement.getHtml());
+					if (inputElement.getComponent() != null) {
+						fieldsetPanel.add(inputElement.getComponent());
+					}
 				}
-				if (fieldset.getName().length() > 0) {
-					buffer.append("</fieldset>");
-				}
+				formPanel.add(fieldsetPanel);
 			}
 		}
-		return buffer;
+		return formPanel;
 	}
 
 	private static Object getHtmlGetterValue(ICollectorPlugin collector, Field field) {
@@ -577,11 +624,11 @@ public class CollectorSettingsDialog extends javax.swing.JDialog {
 		JPanel panel = new JPanel();
 		GridLayout layout = new GridLayout(2, 1);
 		panel.setLayout(layout);
-		JTextField input = new JTextField((String) getHtmlGetterValue(collector, field));
-		layout.addLayoutComponent("lbl"+field.getName(), new JLabel(getMessage(bundle, "form.label." + field.getName())));
-		layout.addLayoutComponent("txt"+field.getName(), input);
-		layout.addLayoutComponent("empty"+field.getName(), new JLabel());
-		layout.addLayoutComponent("empty"+field.getName(), new JLabel(getMessage(bundle, "form.tooltip." + field.getName())));
+		JTextField input = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
+		panel.add("lbl"+field.getName(), new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		panel.add("txt"+field.getName(), input);
+		panel.add("empty"+field.getName(), new JLabel());
+		panel.add("empty"+field.getName(), new JLabel(getMessage(bundle, "form.tooltip." + field.getName())));
 		return panel;
 	}
 
