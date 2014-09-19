@@ -20,11 +20,16 @@ import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JRadioButton;
 import javax.swing.JTextField;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -50,7 +55,7 @@ import com.tibudget.dto.MessagesDto;
 
 public class SettingsDialog extends JDialog {
 
-	private final JPanel contentPanel = new JPanel(new GridLayout(1, 1));
+	private final JPanel contentPanel = new JPanel();
 
 	private static Logger LOG = LoggerFactory.getLogger(CollectorSettingsDialog.class);
 	private JTextField textField;
@@ -149,6 +154,10 @@ public class SettingsDialog extends JDialog {
 		}
 	}
 
+	public enum Type {
+		UN, DEUX, TROIS
+	}
+
 	/**
 	 * Create the dialog.
 	 */
@@ -159,14 +168,26 @@ public class SettingsDialog extends JDialog {
 		getContentPane().add(contentPanel, BorderLayout.CENTER);
 
 		Component form = generateForm("foo", new ICollectorPlugin() {
-			@Input(required=true)
+			@Input(required=true, order=7)
 			private boolean enabled;
 			
-			@Input(required=true)
+			@Input(required=true, fieldset="type_UN", order=5)
 			private char separator;
 
-			@Input(required=true)
+			@Input(required=true, fieldset="type_DEUX", order=4)
 			private File theFile;
+
+			@Input(required=true, password=true, order=2)
+			private String password;
+
+			@Input(required=true, order=1)
+			private String identifier;
+
+			@Input(required=true, order=6)
+			private BankAccountDto account;
+			
+			@Input(required=true, order=3)
+			private Type type;
 
 			@Override
 			public Collection<MessageDto> validate() {
@@ -200,7 +221,7 @@ public class SettingsDialog extends JDialog {
 				
 			}
 		}, ResourceBundle.getBundle("messages"), new MessagesDto(), Collections.<BankAccountDto>emptyList());
-		contentPanel.add(form);
+		contentPanel.add(form, "4, 10, fill, fill");
 
 		{
 			JPanel buttonPane = new JPanel();
@@ -218,7 +239,7 @@ public class SettingsDialog extends JDialog {
 				buttonPane.add(cancelButton);
 			}
 		}
-
+		pack();
 	}
 
 	public Component generateForm(String id, ICollectorPlugin collector, ResourceBundle bundle, MessagesDto messages,
@@ -229,19 +250,19 @@ public class SettingsDialog extends JDialog {
 			if (inputAnnotation != null) {
 				Component component = null;
 				if (field.getType().isEnum()) {
-					generateInputEnum(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
+					component = generateInputEnum(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == int.class) {
-					generateInputInt(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					component = generateInputInt(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == boolean.class) {
-					generateInputBoolean(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
+					component = generateInputBoolean(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == String.class) {
-					generateInputString(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					component = generateInputString(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == char.class) {
 					component = generateInputChar(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == File.class) {
 					component = generateInputFile(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == BankAccountDto.class) {
-					generateInputBankAccount(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()), accounts);
+					component = generateInputBankAccount(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()), accounts);
 				} else {
 					continue;
 				}
@@ -275,13 +296,13 @@ public class SettingsDialog extends JDialog {
 						fieldsetPanel.add(inputElement.getComponent(), BorderLayout.NORTH);
 					}
 				}
-				formPanel.add(fieldsetPanel, BorderLayout.NORTH);
+				formPanel.add(fieldsetPanel, BorderLayout.CENTER);
 			}
 		}
 		return formPanel;
 	}
 
-	private static Object getHtmlGetterValue(ICollectorPlugin collector, Field field) {
+	private Object getHtmlGetterValue(ICollectorPlugin collector, Field field) {
 		Object result = null;
 		try {
 			field.setAccessible(true);
@@ -301,7 +322,7 @@ public class SettingsDialog extends JDialog {
 		return result != null ? result : "";
 	}
 
-	private static String normalizeFieldsetName(String name) {
+	private String normalizeFieldsetName(String name) {
 		String id = name.replaceAll("[^a-zA-Z_]", "").trim();
 		if (id.length() == 0) {
 			id = "fs" + name.hashCode();
@@ -309,7 +330,7 @@ public class SettingsDialog extends JDialog {
 		return id;
 	}
 
-	private static Fieldset getOrCreate(Map<String, Fieldset> fieldsets, String name) {
+	private Fieldset getOrCreate(Map<String, Fieldset> fieldsets, String name) {
 		Fieldset fieldset = fieldsets.get(name);
 		if (fieldset == null) {
 			fieldset = new Fieldset(name);
@@ -318,251 +339,91 @@ public class SettingsDialog extends JDialog {
 		return fieldset;
 	}
 
-	private static String getCssClass(Iterable<MessageDto> messages) {
-		String cssClass = "";
+	private Color getColor(Iterable<MessageDto> messages, Color defaultColor) {
+		Color color = defaultColor;
 		if (messages != null) {
 			for (MessageDto messageDto : messages) {
 				if (messageDto.getType() == MessageDto.MessageType.ERROR) {
-					cssClass = "error";
+					color = Color.RED;
 					break;
 				} else if (messageDto.getType() == MessageDto.MessageType.WARN) {
-					cssClass = "warning";
+					color = Color.ORANGE;
 				} else if (messageDto.getType() == MessageDto.MessageType.SUCCESS) {
-					if (!"warning".equals(cssClass)) {
-						cssClass = "success";
+					if (!"warning".equals(color)) {
+						color = Color.GREEN;
 					}
 				} else if (messageDto.getType() == MessageDto.MessageType.INFO) {
-					if (!"success".equals(cssClass) && !"warning".equals(cssClass)) {
-						cssClass = "info";
+					if (!"success".equals(color) && !"warning".equals(color)) {
+						color = Color.CYAN;
 					}
 				}
 			}
 		}
-		return cssClass;
+		return color;
 	}
 
-	private static String getHtmlAlerts(ResourceBundle bundle, Iterable<MessageDto> messages) {
-		StringBuffer buffer = new StringBuffer();
+	private void addAlerts(JPanel panel, ResourceBundle bundle, Iterable<MessageDto> messages) {
 		if (messages != null) {
 			for (MessageDto messageDto : messages) {
-				buffer.append("<div class=\"alert alert-");
+				JLabel lblNewLabel;
+				try {
+					lblNewLabel = new JLabel(MessageFormat.format(getMessage(bundle, messageDto.getMessageKey()), messageDto.getMessageArguments()));
+				} catch (NullPointerException e) {
+					lblNewLabel = new JLabel("???null???");
+				} catch (ClassCastException e) {
+					lblNewLabel = new JLabel("!!"+messageDto.getMessageKey()+"!!");
+				} catch (IllegalArgumentException e) {
+					lblNewLabel = new JLabel("!!!"+messageDto.getMessageKey()+"!!!");
+				}
 				switch (messageDto.getType()) {
 				case INFO:
-					buffer.append("info");
+					lblNewLabel.setBackground(Color.CYAN);
 					break;
 				case WARN:
-					buffer.append("warning");
+					lblNewLabel.setBackground(Color.ORANGE);
 					break;
 				case SUCCESS:
-					buffer.append("success");
+					lblNewLabel.setBackground(Color.GREEN);
 					break;
 				case ERROR:
 				default:
-					buffer.append("error");
+					lblNewLabel.setBackground(Color.RED);
 					break;
 				}
-				buffer.append("\"><button type=\"button\" class=\"close\" data-dismiss=\"alert\">×</button>");
-				try {
-					buffer.append(MessageFormat.format(getMessage(bundle, messageDto.getMessageKey()), messageDto.getMessageArguments()));
-				} catch (NullPointerException e) {
-					buffer.append("???null???");
-				} catch (ClassCastException e) {
-					buffer.append("!!");
-					buffer.append(messageDto.getMessageKey());
-					buffer.append("!!");
-				} catch (IllegalArgumentException e) {
-					buffer.append("!!!");
-					buffer.append(messageDto.getMessageKey());
-					buffer.append("!!!");
-				}
-				buffer.append("</div>");
+				panel.add(lblNewLabel, "2, 2");
 			}
 		}
-		return buffer.toString();
 	}
 
-	private static String generateInputBoolean(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private Component generateInputBoolean(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
 			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
-		StringBuffer buffer = new StringBuffer("");
-		buffer.append(getHtmlAlerts(bundle, messages));
-		buffer.append("<div class=\"form-group ");
-		buffer.append(getCssClass(messages));
-		buffer.append("\"><label class=\"control-label");
-		if (inputAnnotation.required()) {
-			buffer.append(" required");
-		}
-		buffer.append("\" for=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\">");
-		buffer.append(getMessage(bundle, "form.label." + field.getName()));
-		buffer.append("</label><input class=\"form-control\" type=\"checkbox\" name=\"");
-		buffer.append(field.getName());
-		buffer.append("\" id=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\" value=\"checked\"");
-		Object resultValue = getHtmlGetterValue(collector, field);
-		buffer.append(resultValue);
-		if (inputAnnotation.hideFieldset().length > 0 || inputAnnotation.showFieldset().length > 0) {
-			buffer.append(" onclick=\"");
-			for (String fs : inputAnnotation.hideFieldset()) {
-				Fieldset fieldset = getOrCreate(fieldsets, fs);
-				fieldset.setDisplayed(!" checked".equals(resultValue));
-				if (fs.length() > 0) {
-					buffer.append("$('#idfs");
-					buffer.append(normalizeFieldsetName(fs));
-					buffer.append("').fadeToggle();");
-				}
-			}
-			for (String fs : inputAnnotation.showFieldset()) {
-				Fieldset fieldset = getOrCreate(fieldsets, fs);
-				fieldset.setDisplayed(" checked".equals(resultValue));
-				if (fs.length() > 0) {
-					buffer.append("$('#idfs");
-					buffer.append(normalizeFieldsetName(fs));
-					buffer.append("').fadeToggle();");
-				}
-			}
-			buffer.append("\"");
-		}
-		buffer.append("/>");
-		if (bundle.containsKey("form.tooltip." + field.getName())) {
-			buffer.append("<p class=\"help-block\">");
-			buffer.append(getMessage(bundle, "form.tooltip." + field.getName()));
-			buffer.append("</p>");
-		}
-		buffer.append("</div>");
-		return buffer.toString();
+		JPanel panel = new JPanel();
+		panel.setLayout(new FormLayout(new ColumnSpec[] {
+				FormFactory.RELATED_GAP_COLSPEC,
+				FormFactory.DEFAULT_COLSPEC,
+				FormFactory.RELATED_GAP_COLSPEC,
+				ColumnSpec.decode("default:grow"),},
+			new RowSpec[] {
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,}));
+		
+		addAlerts(panel, bundle, messages);
+
+		JCheckBox checkBox = new JCheckBox(getMessage(bundle, "form.label." + field.getName()));
+		checkBox.setSelected(String.valueOf(getHtmlGetterValue(collector, field)).equals("true"));
+		panel.add(checkBox, "4, 2");
+		checkBox.setForeground(getColor(messages, Color.BLACK));
+
+		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
+		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
+		panel.add(lblNewLabel_1, "4, 4");
+
+		return panel;
 	}
 
-	private static String generateInputInt(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
-			Iterable<MessageDto> messages) {
-		StringBuffer buffer = new StringBuffer("");
-		buffer.append(getHtmlAlerts(bundle, messages));
-		buffer.append("<div class=\"form-group ");
-		buffer.append(getCssClass(messages));
-		buffer.append("\"><label class=\"control-label");
-		if (inputAnnotation.required()) {
-			buffer.append(" required");
-		}
-		buffer.append("\" for=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\">");
-		buffer.append(getMessage(bundle, "form.label." + field.getName()));
-		buffer.append("</label><input class=\"form-control\" type=\"text\" name=\"");
-		buffer.append(field.getName());
-		buffer.append("\" id=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\" value=\"");
-		buffer.append(getHtmlGetterValue(collector, field));
-		buffer.append("\"/>");
-		if (bundle.containsKey("form.tooltip." + field.getName())) {
-			buffer.append("<p class=\"help-block\">");
-			buffer.append(getMessage(bundle, "form.tooltip." + field.getName()));
-			buffer.append("</p>");
-		}
-		buffer.append("</div>");
-		return buffer.toString();
-	}
-
-	private static String generateInputEnum(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
-			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
-		StringBuffer buffer = new StringBuffer("");
-		buffer.append(getHtmlAlerts(bundle, messages));
-		buffer.append("<div class=\"form-group ");
-		buffer.append(getCssClass(messages));
-		buffer.append("\"><label class=\"control-label");
-		if (inputAnnotation.required()) {
-			buffer.append(" required");
-		}
-		buffer.append("\" for=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\">");
-		buffer.append(getMessage(bundle, "form.label." + field.getName()));
-		buffer.append("</label>");
-
-		for (Object enumConstant : field.getType().getEnumConstants()) {
-			buffer.append("<div class=\"radio col-md-offset-1\"><label><input type=\"radio\" name=\"");
-			buffer.append(field.getName());
-			buffer.append("\" id=\"_id");
-			buffer.append(field.getName());
-			buffer.append("\" value=\"");
-			buffer.append(enumConstant.toString());
-			buffer.append("\"");
-			Fieldset fieldset = getOrCreate(fieldsets, normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()));
-			try {
-				field.setAccessible(true);
-				if (enumConstant.equals(field.get(collector))) {
-					buffer.append(" checked");
-					fieldset.setDisplayed(true);
-				} else {
-					fieldset.setDisplayed(false);
-				}
-			} catch (IllegalArgumentException e) {
-				LOG.debug("Cannot get " + field.toGenericString() + ": IllegalArgumentException ->" + e.getMessage());
-			} catch (IllegalAccessException e) {
-				LOG.debug("Cannot get " + field.toGenericString() + ": IllegalAccessException ->" + e.getMessage());
-			}
-			buffer.append(" onclick=\"");
-			for (Object enumConstant2 : field.getType().getEnumConstants()) {
-				if (!enumConstant.equals(enumConstant2)) {
-					buffer.append("$('#idfs");
-					buffer.append(normalizeFieldsetName(field.getName() + "_" + enumConstant2.toString()));
-					buffer.append("').fadeOut();");
-				}
-			}
-			buffer.append("$('#idfs");
-			buffer.append(normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()));
-			buffer.append("').fadeIn();");
-			buffer.append("\"/>");
-			buffer.append(getMessage(bundle, "form.label." + field.getName() + "." + enumConstant.toString()));
-			buffer.append("</label></div>");
-		}
-		if (bundle.containsKey("form.tooltip." + field.getName())) {
-			buffer.append("<p class=\"help-block\">");
-			buffer.append(getMessage(bundle, "form.tooltip." + field.getName()));
-			buffer.append("</p>");
-		}
-		buffer.append("</div>");
-		return buffer.toString();
-	}
-
-	private static String generateInputString(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
-			Iterable<MessageDto> messages) {
-		StringBuffer buffer = new StringBuffer("");
-		buffer.append(getHtmlAlerts(bundle, messages));
-		buffer.append("<div class=\"form-group ");
-		buffer.append(getCssClass(messages));
-		buffer.append("\"><label class=\"control-label");
-		if (inputAnnotation.required()) {
-			buffer.append(" required");
-		}
-		buffer.append("\" for=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\">");
-		buffer.append(getMessage(bundle, "form.label." + field.getName()));
-		buffer.append("</label><input class=\"form-control\" type=\"");
-		if (inputAnnotation.password()) {
-			buffer.append("password");
-		} else {
-			buffer.append("text");
-		}
-		buffer.append("\" name=\"");
-		buffer.append(field.getName());
-		buffer.append("\" id=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\" value=\"");
-		buffer.append(getHtmlGetterValue(collector, field));
-		buffer.append("\"/>");
-		if (bundle.containsKey("form.tooltip." + field.getName())) {
-			buffer.append("<p class=\"help-block\">");
-			buffer.append(getMessage(bundle, "form.tooltip." + field.getName()));
-			buffer.append("</p>");
-		}
-		buffer.append("</div>");
-		return buffer.toString();
-	}
-
-	private static Component generateInputChar(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private Component generateInputInt(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
 			Iterable<MessageDto> messages) {
 		JPanel panel = new JPanel();
 		panel.setLayout(new FormLayout(new ColumnSpec[] {
@@ -576,13 +437,129 @@ public class SettingsDialog extends JDialog {
 				FormFactory.RELATED_GAP_ROWSPEC,
 				FormFactory.DEFAULT_ROWSPEC,}));
 		
+		addAlerts(panel, bundle, messages);
+		
 		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2, right, default");
+		panel.add(lblNewLabel, "2, 2");
+		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
 
 		JTextField textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
 		textField.setBackground(Color.WHITE);
-		panel.add(textField, "4, 2, fill, default");
+		panel.add(textField, "4, 2");
 		textField.setColumns(10);
+		textField.setForeground(getColor(messages, Color.BLACK));
+
+		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
+		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
+		panel.add(lblNewLabel_1, "4, 4");
+
+		return panel;
+	}
+
+	private Component generateInputEnum(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
+		
+		JPanel panel = new JPanel();
+		FormLayout layout = new FormLayout(new ColumnSpec[] {
+				FormFactory.RELATED_GAP_COLSPEC,
+				FormFactory.DEFAULT_COLSPEC,
+				FormFactory.RELATED_GAP_COLSPEC,
+				ColumnSpec.decode("default:grow")},
+			new RowSpec[] {
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC});
+		panel.setLayout(layout);
+		
+		addAlerts(panel, bundle, messages);
+		
+		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
+		panel.add(lblNewLabel, "2, 2");
+		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
+
+		ButtonGroup group = new ButtonGroup();
+		int rowIndex = 2;
+		for (Object enumConstant : field.getType().getEnumConstants()) {
+			JRadioButton jRadioButton = new JRadioButton(getMessage(bundle, "form.label." + field.getName() + "." + enumConstant.toString()));
+			jRadioButton.setSelected(enumConstant.equals(getHtmlGetterValue(collector, field)));
+			group.add(jRadioButton);
+			if (rowIndex > 2) {
+				layout.appendRow(FormFactory.RELATED_GAP_ROWSPEC);
+				layout.appendRow(FormFactory.DEFAULT_ROWSPEC);
+			}
+			panel.add(new JLabel(), "2, "+rowIndex);
+			panel.add(jRadioButton, "4, "+rowIndex);
+			rowIndex += 2;
+		}
+
+		layout.appendRow(FormFactory.RELATED_GAP_ROWSPEC);
+		layout.appendRow(FormFactory.DEFAULT_ROWSPEC);
+		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
+		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
+		panel.add(lblNewLabel_1, "4, "+rowIndex);
+
+		return panel;
+	}
+
+	private Component generateInputString(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
+		JPanel panel = new JPanel();
+		panel.setLayout(new FormLayout(new ColumnSpec[] {
+				FormFactory.RELATED_GAP_COLSPEC,
+				FormFactory.DEFAULT_COLSPEC,
+				FormFactory.RELATED_GAP_COLSPEC,
+				ColumnSpec.decode("default:grow"),},
+			new RowSpec[] {
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,}));
+		
+		addAlerts(panel, bundle, messages);
+		
+		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
+		panel.add(lblNewLabel, "2, 2");
+		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
+
+		JTextField textField;
+		if (inputAnnotation.password()) {
+			textField = new JPasswordField();
+		} else {
+			textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
+		}
+		textField.setBackground(Color.WHITE);
+		textField.setForeground(getColor(messages, Color.BLACK));
+		panel.add(textField, "4, 2");
+
+		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
+		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
+		panel.add(lblNewLabel_1, "4, 4");
+
+		return panel;
+	}
+
+	private Component generateInputChar(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+			Iterable<MessageDto> messages) {
+		JPanel panel = new JPanel();
+		panel.setLayout(new FormLayout(new ColumnSpec[] {
+				FormFactory.RELATED_GAP_COLSPEC,
+				FormFactory.DEFAULT_COLSPEC,
+				FormFactory.RELATED_GAP_COLSPEC,
+				ColumnSpec.decode("default:grow"),},
+			new RowSpec[] {
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,}));
+		
+		addAlerts(panel, bundle, messages);
+		
+		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
+		panel.add(lblNewLabel, "2, 2");
+		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
+
+		JTextField textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
+		textField.setBackground(Color.WHITE);
+		textField.setForeground(getColor(messages, Color.BLACK));
+		panel.add(textField, "4, 2");
 
 		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
 		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
@@ -604,8 +581,11 @@ public class SettingsDialog extends JDialog {
 				FormFactory.RELATED_GAP_ROWSPEC,
 				FormFactory.DEFAULT_ROWSPEC,}));
 		
+		addAlerts(panel, bundle, messages);
+		
 		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2, right, default");
+		panel.add(lblNewLabel, "2, 2");
+		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
 
 		JButton btnBrowse = new JButton("Browse");
 		btnBrowse.addActionListener(new ActionListener() {
@@ -622,7 +602,7 @@ public class SettingsDialog extends JDialog {
 				}
 			}
 		});
-		panel.add(btnBrowse, "4, 2, fill, default");
+		panel.add(btnBrowse, "4, 2");
 
 		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
 		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
@@ -631,44 +611,37 @@ public class SettingsDialog extends JDialog {
 		return panel;
 	}
 
-	private static String generateInputBankAccount(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages,
+	private Component generateInputBankAccount(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages,
 			List<BankAccountDto> accounts) {
-		StringBuffer buffer = new StringBuffer("");
-		buffer.append(getHtmlAlerts(bundle, messages));
-		buffer.append("<div class=\"form-group ");
-		buffer.append(getCssClass(messages));
-		buffer.append("\"><label class=\"control-label");
-		if (inputAnnotation.required()) {
-			buffer.append(" required");
-		}
-		buffer.append("\" for=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\">");
-		buffer.append(getMessage(bundle, "form.label." + field.getName()));
-		buffer.append("</label><select class=\"form-control\" name=\"");
-		buffer.append(field.getName());
-		buffer.append("\" id=\"_id");
-		buffer.append(field.getName());
-		buffer.append("\">");
-		for (BankAccountDto bankAccountDto : accounts) {
-			buffer.append("<option value=\"");
-			buffer.append(bankAccountDto.getId());
-			buffer.append("\">");
-			buffer.append(bankAccountDto.getTitle());
-			buffer.append("</option>");
-		}
-		buffer.append("<option value=\"\">--</option>");
-		buffer.append("</select>");
-		if (bundle.containsKey("form.tooltip." + field.getName())) {
-			buffer.append("<p class=\"help-block\">");
-			buffer.append(getMessage(bundle, "form.tooltip." + field.getName()));
-			buffer.append("</p>");
-		}
-		buffer.append("</div>");
-		return buffer.toString();
+		JPanel panel = new JPanel();
+		panel.setLayout(new FormLayout(new ColumnSpec[] {
+				FormFactory.RELATED_GAP_COLSPEC,
+				FormFactory.DEFAULT_COLSPEC,
+				FormFactory.RELATED_GAP_COLSPEC,
+				ColumnSpec.decode("default:grow"),},
+			new RowSpec[] {
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,}));
+		
+		addAlerts(panel, bundle, messages);
+		
+		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
+		panel.add(lblNewLabel, "2, 2");
+		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
+
+		JComboBox<BankAccountDto> list = new JComboBox<BankAccountDto>(accounts.toArray(new BankAccountDto[0]));
+		panel.add(list, "4, 2");
+
+		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
+		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
+		panel.add(lblNewLabel_1, "4, 4");
+
+		return panel;
 	}
 
-	private static String getMessage(ResourceBundle bundle, String key, String defaultValue) {
+	private String getMessage(ResourceBundle bundle, String key, String defaultValue) {
 		String msg = "";
 		try {
 			msg = bundle.getString(key);
@@ -678,11 +651,11 @@ public class SettingsDialog extends JDialog {
 		return msg;
 	}
 
-	private static String getMessage(ResourceBundle bundle, String key) {
+	private String getMessage(ResourceBundle bundle, String key) {
 		return getMessage(bundle, key, "???" + key + "???");
 	}
 
-	public static boolean hasFileInput(ICollectorPlugin collector) {
+	public boolean hasFileInput(ICollectorPlugin collector) {
 		for (Field field : collector.getClass().getDeclaredFields()) {
 			Input inputAnnotation = field.getAnnotation(Input.class);
 			if (inputAnnotation != null) {
