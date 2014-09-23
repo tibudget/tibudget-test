@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
@@ -24,6 +25,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -37,10 +39,8 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.jgoodies.forms.factories.FormFactory;
-import com.jgoodies.forms.layout.ColumnSpec;
+import com.jgoodies.forms.builder.DefaultFormBuilder;
 import com.jgoodies.forms.layout.FormLayout;
-import com.jgoodies.forms.layout.RowSpec;
 import com.tibudget.api.ICollectorPlugin;
 import com.tibudget.api.Input;
 import com.tibudget.api.exceptions.AccessDeny;
@@ -55,18 +55,22 @@ import com.tibudget.dto.MessagesDto;
 
 public class SettingsDialog extends JDialog {
 
-	private final JPanel contentPanel = new JPanel();
+	private static final long serialVersionUID = 1L;
 
-	private static Logger LOG = LoggerFactory.getLogger(CollectorSettingsDialog.class);
-	private JTextField textField;
+	private static Logger LOG = LoggerFactory.getLogger(SettingsDialog.class);
+
+	private final Map<String, Fieldset> fieldsets = new HashMap<String, Fieldset>();
+	
+	private final ICollectorPlugin pluginInstance;
 
 	private static class InputElement implements Comparable<InputElement> {
 		int order = -1;
+		JLabel label;
+		JLabel tooltip;
 		Component component;
 
-		public InputElement(int order, Component component) {
+		public InputElement(Component component) {
 			super();
-			this.order = order;
 			this.component = component;
 		}
 
@@ -82,10 +86,31 @@ public class SettingsDialog extends JDialog {
 		public Component getComponent() {
 			return this.component;
 		}
+
+		public JLabel getLabel() {
+			return label;
+		}
+
+		public void setLabel(JLabel label) {
+			this.label = label;
+		}
+
+		public JLabel getTooltip() {
+			return tooltip;
+		}
+
+		public void setTooltip(JLabel tooltip) {
+			this.tooltip = tooltip;
+		}
+
+		public void setOrder(int order) {
+			this.order = order;
+		}
 	}
 
 	private static class Fieldset implements Comparable<Fieldset> {
 		List<InputElement> elements;
+		JComponent separator;
 		boolean displayed;
 		String name;
 
@@ -139,6 +164,14 @@ public class SettingsDialog extends JDialog {
 		public void setDisplayed(boolean displayed) {
 			this.displayed = displayed;
 		}
+
+		public JComponent getSeparator() {
+			return separator;
+		}
+
+		public void setSeparator(JComponent separator) {
+			this.separator = separator;
+		}
 	}
 
 	/**
@@ -146,7 +179,54 @@ public class SettingsDialog extends JDialog {
 	 */
 	public static void main(String[] args) {
 		try {
-			SettingsDialog dialog = new SettingsDialog();
+			SettingsDialog dialog = new SettingsDialog(new ICollectorPlugin() {
+				@Input(required=true, order=7)
+				private boolean enabled;
+				
+				@Input(required=true, fieldset="type_UN", order=5)
+				private char separator;
+
+				@Input(required=true, fieldset="type_DEUX", order=4)
+				private File theFile;
+
+				@Input(required=true, password=true, order=2)
+				private String password;
+
+				@Input(required=true, order=1)
+				private String identifier;
+
+				@Input(required=true, order=6)
+				private BankAccountDto account;
+				
+				@Input(required=true, order=3)
+				private Type type;
+
+				@Override
+				public Collection<MessageDto> validate() {
+					return null;
+				}
+				
+				@Override
+				public int getProgress() {
+					return 0;
+				}
+				
+				@Override
+				public Iterable<BankOperationDto> getBankOperations() {
+					return null;
+				}
+				
+				@Override
+				public Iterable<BankAccountDto> getBankAccounts() {
+					return null;
+				}
+				
+				@Override
+				public void collect(Iterable<BankAccountDto> existingBankAccounts)
+						throws CollectError, AccessDeny, TemporaryUnavailable,
+						ConnectionFailure, ParameterError {
+				}
+			});
 			dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 			dialog.setVisible(true);
 		} catch (Exception e) {
@@ -161,94 +241,49 @@ public class SettingsDialog extends JDialog {
 	/**
 	 * Create the dialog.
 	 */
-	public SettingsDialog() {
+	public SettingsDialog(ICollectorPlugin pluginInstance) {
+		this.pluginInstance = pluginInstance;
+		setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 		setBounds(100, 100, 450, 300);
+		
 		getContentPane().setLayout(new BorderLayout());
+		JPanel contentPanel = new JPanel(); 
 		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
 		getContentPane().add(contentPanel, BorderLayout.CENTER);
 
-		Component form = generateForm("foo", new ICollectorPlugin() {
-			@Input(required=true, order=7)
-			private boolean enabled;
-			
-			@Input(required=true, fieldset="type_UN", order=5)
-			private char separator;
+		ResourceBundle bundle;
+		try {
+			bundle = ResourceBundle.getBundle("messages", Locale.ENGLISH, this.pluginInstance.getClass().getClassLoader());
+		}
+		catch (MissingResourceException e) {
+			bundle = ResourceBundle.getBundle("test_collector_messages", Locale.ENGLISH, this.pluginInstance.getClass().getClassLoader());
+		}
+		
+		Component form = generateForm("foo", this.pluginInstance, bundle, new MessagesDto(), Collections.<BankAccountDto>emptyList());
 
-			@Input(required=true, fieldset="type_DEUX", order=4)
-			private File theFile;
-
-			@Input(required=true, password=true, order=2)
-			private String password;
-
-			@Input(required=true, order=1)
-			private String identifier;
-
-			@Input(required=true, order=6)
-			private BankAccountDto account;
-			
-			@Input(required=true, order=3)
-			private Type type;
-
-			@Override
-			public Collection<MessageDto> validate() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			
-			@Override
-			public int getProgress() {
-				// TODO Auto-generated method stub
-				return 0;
-			}
-			
-			@Override
-			public Iterable<BankOperationDto> getBankOperations() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			
-			@Override
-			public Iterable<BankAccountDto> getBankAccounts() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			
-			@Override
-			public void collect(Iterable<BankAccountDto> existingBankAccounts)
-					throws CollectError, AccessDeny, TemporaryUnavailable,
-					ConnectionFailure, ParameterError {
-				// TODO Auto-generated method stub
-				
-			}
-		}, ResourceBundle.getBundle("messages"), new MessagesDto(), Collections.<BankAccountDto>emptyList());
 		contentPanel.add(form, "4, 10, fill, fill");
 
-		{
-			JPanel buttonPane = new JPanel();
-			buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
-			getContentPane().add(buttonPane, BorderLayout.SOUTH);
-			{
-				JButton okButton = new JButton("OK");
-				okButton.setActionCommand("OK");
-				buttonPane.add(okButton);
-				getRootPane().setDefaultButton(okButton);
-			}
-			{
-				JButton cancelButton = new JButton("Cancel");
-				cancelButton.setActionCommand("Cancel");
-				buttonPane.add(cancelButton);
-			}
-		}
+		JPanel buttonPane = new JPanel();
+		buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
+		getContentPane().add(buttonPane, BorderLayout.SOUTH);
+		
+		JButton okButton = new JButton("OK");
+		okButton.setActionCommand("OK");
+		buttonPane.add(okButton);
+		getRootPane().setDefaultButton(okButton);
+		JButton cancelButton = new JButton("Cancel");
+		cancelButton.setActionCommand("Cancel");
+		buttonPane.add(cancelButton);
+
 		pack();
 	}
 
 	public Component generateForm(String id, ICollectorPlugin collector, ResourceBundle bundle, MessagesDto messages,
 			List<BankAccountDto> accounts) {
-		Map<String, Fieldset> fieldsets = new HashMap<String, Fieldset>();
 		for (Field field : collector.getClass().getDeclaredFields()) {
 			Input inputAnnotation = field.getAnnotation(Input.class);
 			if (inputAnnotation != null) {
-				Component component = null;
+				InputElement component = null;
 				if (field.getType().isEnum()) {
 					component = generateInputEnum(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == int.class) {
@@ -268,38 +303,56 @@ public class SettingsDialog extends JDialog {
 				}
 				if (component != null) {
 					Fieldset fieldset = getOrCreate(fieldsets, inputAnnotation.fieldset());
-					fieldset.getElements().add(new InputElement(inputAnnotation.order(), component));
+					component.setOrder(inputAnnotation.order());
+					fieldset.getElements().add(component);
 				}
 			}
 		}
 		List<Fieldset> fsList = new ArrayList<Fieldset>(fieldsets.values());
 		Collections.sort(fsList);
-		JPanel formPanel = new JPanel(new GridLayout(fsList.size(), 1));
+		DefaultFormBuilder builder = new DefaultFormBuilder(new FormLayout(""));
+        builder.appendColumn("right:pref");
+        builder.appendColumn("5dlu");
+        builder.appendColumn("fill:max(pref; 100px)");
+        builder.appendColumn("5dlu");
+        
 		for (Fieldset fieldset : fsList) {
 			if (fieldset.getElements().size() > 0) {
-				JPanel fieldsetPanel = new JPanel(new GridLayout(fieldset.getElements().size(), 1));
-				if (fieldset.getName().length() > 0) {
-					String title = null;
-					try {
-						title = getMessage(bundle, "form.fieldset." + fieldset.getName(), null);
-					} catch (MissingResourceException e) {
-						// Ignore
-					}
-					fieldsetPanel.setVisible(fieldset.isDisplayed());
-					if (title != null && title.length() > 0) {
-						fieldsetPanel.add(new JLabel(title));
-					}
-				}
 				Collections.sort(fieldset.getElements());
+				fieldset.setSeparator(builder.appendSeparator(normalizeFieldsetName(fieldset.getName())));
 				for (InputElement inputElement : fieldset.getElements()) {
 					if (inputElement.getComponent() != null) {
-						fieldsetPanel.add(inputElement.getComponent(), BorderLayout.NORTH);
+						builder.append(inputElement.getLabel(), inputElement.getComponent());
+						builder.nextLine();
+						if (inputElement.getTooltip() != null) {
+							JLabel tooltip = inputElement.getTooltip();
+							tooltip.setFont(new Font("Tahoma", Font.ITALIC, 11));
+							builder.append("", tooltip);
+							builder.nextLine();
+						}
 					}
 				}
-				formPanel.add(fieldsetPanel, BorderLayout.CENTER);
+				// Init display state
+				showFieldSet(normalizeFieldsetName(fieldset.getName()), fieldset.isDisplayed());
 			}
 		}
-		return formPanel;
+		
+		return builder.getPanel();
+	}
+	
+	private void showFieldSet(String fieldsetName, boolean show) {
+		Fieldset fieldset = fieldsets.get(fieldsetName);
+		if (fieldset != null) {
+			for (InputElement element: fieldset.getElements()) {
+				if (element.getLabel() != null) element.getLabel().setVisible(show);
+				if (element.getComponent() != null) element.getComponent().setVisible(show);
+				if (element.getTooltip() != null) element.getTooltip().setVisible(show);
+			}
+			if (fieldset.getSeparator() != null) {
+				fieldset.getSeparator().setVisible(show);
+			}
+			pack();
+		}
 	}
 
 	private Object getHtmlGetterValue(ICollectorPlugin collector, Field field) {
@@ -395,129 +448,80 @@ public class SettingsDialog extends JDialog {
 		}
 	}
 
-	private Component generateInputBoolean(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private InputElement generateInputBoolean(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
 			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
-		JPanel panel = new JPanel();
-		panel.setLayout(new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow"),},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,}));
-		
-		addAlerts(panel, bundle, messages);
 
 		JCheckBox checkBox = new JCheckBox(getMessage(bundle, "form.label." + field.getName()));
 		checkBox.setSelected(String.valueOf(getHtmlGetterValue(collector, field)).equals("true"));
-		panel.add(checkBox, "4, 2");
 		checkBox.setForeground(getColor(messages, Color.BLACK));
 
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, 4");
-
-		return panel;
+		InputElement element = new InputElement(checkBox);
+		element.setLabel(new JLabel(""));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
-	private Component generateInputInt(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private InputElement generateInputInt(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
 			Iterable<MessageDto> messages) {
-		JPanel panel = new JPanel();
-		panel.setLayout(new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow"),},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,}));
-		
-		addAlerts(panel, bundle, messages);
-		
-		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2");
-		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
 
 		JTextField textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
 		textField.setBackground(Color.WHITE);
-		panel.add(textField, "4, 2");
 		textField.setColumns(10);
 		textField.setForeground(getColor(messages, Color.BLACK));
 
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, 4");
-
-		return panel;
+		InputElement element = new InputElement(textField);
+		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
-	private Component generateInputEnum(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private InputElement generateInputEnum(ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle,
 			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
 		
-		JPanel panel = new JPanel();
-		FormLayout layout = new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow")},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC});
-		panel.setLayout(layout);
-		
-		addAlerts(panel, bundle, messages);
-		
-		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2");
-		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
-
+		final JPanel panel = new JPanel(new GridLayout(field.getType().getEnumConstants().length, 1));
 		ButtonGroup group = new ButtonGroup();
 		int rowIndex = 2;
-		for (Object enumConstant : field.getType().getEnumConstants()) {
+		for (final Object enumConstant : field.getType().getEnumConstants()) {
 			JRadioButton jRadioButton = new JRadioButton(getMessage(bundle, "form.label." + field.getName() + "." + enumConstant.toString()));
-			jRadioButton.setSelected(enumConstant.equals(getHtmlGetterValue(collector, field)));
-			group.add(jRadioButton);
-			if (rowIndex > 2) {
-				layout.appendRow(FormFactory.RELATED_GAP_ROWSPEC);
-				layout.appendRow(FormFactory.DEFAULT_ROWSPEC);
+			Fieldset fieldset = getOrCreate(fieldsets, normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()));
+			try {
+				field.setAccessible(true);
+				if (enumConstant.equals(field.get(collector))) {
+					jRadioButton.setSelected(true);
+					fieldset.setDisplayed(true);
+				} else {
+					fieldset.setDisplayed(false);
+				}
+			} catch (IllegalArgumentException e) {
+				LOG.debug("Cannot get " + field.toGenericString() + ": IllegalArgumentException ->" + e.getMessage());
+			} catch (IllegalAccessException e) {
+				LOG.debug("Cannot get " + field.toGenericString() + ": IllegalAccessException ->" + e.getMessage());
 			}
+			group.add(jRadioButton);
 			panel.add(new JLabel(), "2, "+rowIndex);
 			panel.add(jRadioButton, "4, "+rowIndex);
 			rowIndex += 2;
+			jRadioButton.addActionListener(new ActionListener() {
+				
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					for (Object enumConstant2 : field.getType().getEnumConstants()) {
+						if (!enumConstant.equals(enumConstant2)) {
+							showFieldSet(normalizeFieldsetName(field.getName() + "_" + enumConstant2.toString()), false);
+						}
+					}
+					showFieldSet(normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()), true);
+				}
+			});
 		}
 
-		layout.appendRow(FormFactory.RELATED_GAP_ROWSPEC);
-		layout.appendRow(FormFactory.DEFAULT_ROWSPEC);
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, "+rowIndex);
-
-		return panel;
+		InputElement element = new InputElement(panel);
+		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
-	private Component generateInputString(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
-		JPanel panel = new JPanel();
-		panel.setLayout(new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow"),},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,}));
-		
-		addAlerts(panel, bundle, messages);
-		
-		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2");
-		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
+	private InputElement generateInputString(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
 
 		JTextField textField;
 		if (inputAnnotation.password()) {
@@ -527,65 +531,27 @@ public class SettingsDialog extends JDialog {
 		}
 		textField.setBackground(Color.WHITE);
 		textField.setForeground(getColor(messages, Color.BLACK));
-		panel.add(textField, "4, 2");
 
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, 4");
-
-		return panel;
+		InputElement element = new InputElement(textField);
+		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
-	private Component generateInputChar(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private InputElement generateInputChar(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
 			Iterable<MessageDto> messages) {
-		JPanel panel = new JPanel();
-		panel.setLayout(new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow"),},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,}));
-		
-		addAlerts(panel, bundle, messages);
-		
-		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2");
-		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
 
 		JTextField textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
 		textField.setBackground(Color.WHITE);
 		textField.setForeground(getColor(messages, Color.BLACK));
-		panel.add(textField, "4, 2");
 
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, 4");
-
-		return panel;
+		InputElement element = new InputElement(textField);
+		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
-	private Component generateInputFile(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
-		JPanel panel = new JPanel();
-		panel.setLayout(new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow"),},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,}));
-		
-		addAlerts(panel, bundle, messages);
-		
-		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2");
-		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
+	private InputElement generateInputFile(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
 
 		JButton btnBrowse = new JButton("Browse");
 		btnBrowse.addActionListener(new ActionListener() {
@@ -596,49 +562,28 @@ public class SettingsDialog extends JDialog {
 				FileNameExtensionFilter filter = new FileNameExtensionFilter("Jar files", "jar");
 				chooser.setFileFilter(filter);
 				chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-				int returnVal = chooser.showOpenDialog(contentPanel);
+				int returnVal = chooser.showOpenDialog(getContentPane());
 				if (returnVal == JFileChooser.APPROVE_OPTION) {
 					// TODO
 				}
 			}
 		});
-		panel.add(btnBrowse, "4, 2");
 
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, 4");
-
-		return panel;
+		InputElement element = new InputElement(btnBrowse);
+		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
-	private Component generateInputBankAccount(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages,
+	private InputElement generateInputBankAccount(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages,
 			List<BankAccountDto> accounts) {
-		JPanel panel = new JPanel();
-		panel.setLayout(new FormLayout(new ColumnSpec[] {
-				FormFactory.RELATED_GAP_COLSPEC,
-				FormFactory.DEFAULT_COLSPEC,
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("default:grow"),},
-			new RowSpec[] {
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,
-				FormFactory.RELATED_GAP_ROWSPEC,
-				FormFactory.DEFAULT_ROWSPEC,}));
-		
-		addAlerts(panel, bundle, messages);
-		
-		JLabel lblNewLabel = new JLabel(getMessage(bundle, "form.label." + field.getName()));
-		panel.add(lblNewLabel, "2, 2");
-		lblNewLabel.setForeground(getColor(messages, Color.BLACK));
 
 		JComboBox<BankAccountDto> list = new JComboBox<BankAccountDto>(accounts.toArray(new BankAccountDto[0]));
-		panel.add(list, "4, 2");
 
-		JLabel lblNewLabel_1 = new JLabel(getMessage(bundle, "form.tooltip." + field.getName()));
-		lblNewLabel_1.setFont(new Font("Tahoma", Font.ITALIC, 11));
-		panel.add(lblNewLabel_1, "4, 4");
-
-		return panel;
+		InputElement element = new InputElement(list);
+		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
+		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
+		return element;
 	}
 
 	private String getMessage(ResourceBundle bundle, String key, String defaultValue) {

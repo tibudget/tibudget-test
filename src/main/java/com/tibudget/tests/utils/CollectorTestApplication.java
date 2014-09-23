@@ -35,6 +35,8 @@ public class CollectorTestApplication {
 	private JProgressBar progressBar;
 
 	private File pluginArchive;
+	
+	private ICollectorPlugin pluginInstance;
 
 	private ServiceLoader<ICollectorPlugin> pluginLoader;
 
@@ -158,14 +160,23 @@ public class CollectorTestApplication {
 	}
 	
 	private void btnSettingsActionPerformed(java.awt.event.ActionEvent evt) {
-		CollectorSettingsDialog settingsDialog = new CollectorSettingsDialog(frmTibudgetTestApplication, true);
-		settingsDialog.setVisible(true);
+		if (pluginInstance != null) {
+			SettingsDialog settingsDialog = new SettingsDialog(pluginInstance);
+			settingsDialog.setVisible(true);
+		}
 	}
 
 	private boolean loadPlugin(File archive) {
-		boolean isValid = true;
+		boolean isValid = false;
+		pluginArchive = archive;
+		try {
+			pluginInstance = getInstance();
+			isValid = true;
+		} catch (MalformedURLException e) {
+			console.append(e.getMessage());
+			console.append("\n");
+		}
 		if (isValid) {
-			pluginArchive = archive;
 
 			// Enable / disable UI elements
 			btnReload.setEnabled(false);
