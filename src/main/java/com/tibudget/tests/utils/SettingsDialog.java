@@ -25,7 +25,6 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -34,7 +33,10 @@ import javax.swing.JPasswordField;
 import javax.swing.JRadioButton;
 import javax.swing.JTextField;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.text.BadLocationException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,117 +64,6 @@ public class SettingsDialog extends JDialog {
 	private final Map<String, Fieldset> fieldsets = new HashMap<String, Fieldset>();
 	
 	private final ICollectorPlugin pluginInstance;
-
-	private static class InputElement implements Comparable<InputElement> {
-		int order = -1;
-		JLabel label;
-		JLabel tooltip;
-		Component component;
-
-		public InputElement(Component component) {
-			super();
-			this.component = component;
-		}
-
-		@Override
-		public int compareTo(InputElement o) {
-			return getOrder() - o.getOrder();
-		}
-
-		public int getOrder() {
-			return this.order;
-		}
-
-		public Component getComponent() {
-			return this.component;
-		}
-
-		public JLabel getLabel() {
-			return label;
-		}
-
-		public void setLabel(JLabel label) {
-			this.label = label;
-		}
-
-		public JLabel getTooltip() {
-			return tooltip;
-		}
-
-		public void setTooltip(JLabel tooltip) {
-			this.tooltip = tooltip;
-		}
-
-		public void setOrder(int order) {
-			this.order = order;
-		}
-	}
-
-	private static class Fieldset implements Comparable<Fieldset> {
-		List<InputElement> elements;
-		JComponent separator;
-		boolean displayed;
-		String name;
-
-		public Fieldset(String name) {
-			super();
-			this.name = name;
-			this.displayed = true;
-			this.elements = new ArrayList<InputElement>();
-		}
-
-		@Override
-		public int compareTo(Fieldset o) {
-			return o != null ? getMinOrder() - o.getMinOrder() : -1;
-		}
-
-		@Override
-		public int hashCode() {
-			return this.name != null ? this.name.hashCode() : super.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this.name != null && obj != null && obj instanceof Fieldset) {
-				return this.name.equals(((Fieldset) obj).getName());
-			}
-			return super.equals(obj);
-		}
-
-		public List<InputElement> getElements() {
-			return this.elements;
-		}
-
-		public int getMinOrder() {
-			int min = Integer.MAX_VALUE;
-			if (this.elements != null) {
-				for (InputElement element : this.elements) {
-					min = Math.min(min, element.order);
-				}
-			}
-			return min;
-		}
-
-		public String getName() {
-			return this.name;
-		}
-
-		public boolean isDisplayed() {
-			return this.displayed;
-		}
-
-		public void setDisplayed(boolean displayed) {
-			this.displayed = displayed;
-		}
-
-		public JComponent getSeparator() {
-			return separator;
-		}
-
-		public void setSeparator(JComponent separator) {
-			this.separator = separator;
-		}
-	}
 
 	/**
 	 * Launch the application.
@@ -241,7 +132,7 @@ public class SettingsDialog extends JDialog {
 	/**
 	 * Create the dialog.
 	 */
-	public SettingsDialog(ICollectorPlugin pluginInstance) {
+	public SettingsDialog(final ICollectorPlugin pluginInstance) {
 		this.pluginInstance = pluginInstance;
 		setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 		setBounds(100, 100, 450, 300);
@@ -269,6 +160,13 @@ public class SettingsDialog extends JDialog {
 		
 		JButton okButton = new JButton("OK");
 		okButton.setActionCommand("OK");
+		okButton.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				validatePluginInstance();
+			}
+		});
 		buttonPane.add(okButton);
 		getRootPane().setDefaultButton(okButton);
 		JButton cancelButton = new JButton("Cancel");
@@ -276,6 +174,13 @@ public class SettingsDialog extends JDialog {
 		buttonPane.add(cancelButton);
 
 		pack();
+	}
+	
+	public void validatePluginInstance() {
+		Collection<MessageDto> msg = pluginInstance.validate();
+		for (MessageDto messageDto : msg) {
+			
+		}
 	}
 
 	public Component generateForm(String id, ICollectorPlugin collector, ResourceBundle bundle, MessagesDto messages,
@@ -285,24 +190,24 @@ public class SettingsDialog extends JDialog {
 			if (inputAnnotation != null) {
 				InputElement component = null;
 				if (field.getType().isEnum()) {
-					component = generateInputEnum(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
+					component = generateInputEnum(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == int.class) {
 					component = generateInputInt(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == boolean.class) {
-					component = generateInputBoolean(collector, field, inputAnnotation, bundle, fieldsets, messages.getFieldMessages(field.getName()));
+					component = generateInputBoolean(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == String.class) {
 					component = generateInputString(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == char.class) {
 					component = generateInputChar(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == File.class) {
-					component = generateInputFile(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
+					component = generateInputFile(collector, field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()));
 				} else if (field.getType() == BankAccountDto.class) {
 					component = generateInputBankAccount(field, inputAnnotation, bundle, messages.getFieldMessages(field.getName()), accounts);
 				} else {
 					continue;
 				}
 				if (component != null) {
-					Fieldset fieldset = getOrCreate(fieldsets, inputAnnotation.fieldset());
+					Fieldset fieldset = getOrCreateFieldset(inputAnnotation.fieldset());
 					component.setOrder(inputAnnotation.order());
 					fieldset.getElements().add(component);
 				}
@@ -355,64 +260,51 @@ public class SettingsDialog extends JDialog {
 		}
 	}
 
-	private Object getHtmlGetterValue(ICollectorPlugin collector, Field field) {
-		Object result = null;
+	private <T> T getValue(ICollectorPlugin collector, Field field, T defaultValue) {
+		T result = null;
 		try {
 			field.setAccessible(true);
-			result = field.get(collector);
-			if (result != null && result.getClass() == Boolean.class) {
-				if ((Boolean) result) {
-					result = " checked";
-				} else {
-					result = "";
+			result = (T) field.get(collector);
+		} catch (IllegalArgumentException e) {
+			LOG.debug("Cannot get " + field.toGenericString() + ": IllegalArgumentException -> " + e.getMessage());
+		} catch (IllegalAccessException e) {
+			LOG.debug("Cannot get " + field.toGenericString() + ": IllegalAccessException -> " + e.getMessage());
+		}
+		return result != null ? result : defaultValue;
+	}
+	
+	private <T> void setValue(ICollectorPlugin collector, Field field, T value) {
+		try {
+			field.setAccessible(true);
+			if (value != null && field.getType() == String.class && !(value instanceof String)) {
+				field.set(collector, String.valueOf(value));
+			}
+			else if (value != null && field.getType() == char.class && value instanceof String) {
+				if (((String)value).length() > 0) {
+					field.set(collector, ((String)value).charAt(0));
+				}
+				else {
+					field.set(collector, '\u0000');
 				}
 			}
+			else {
+				field.set(collector, value);
+			}
+			LOG.debug(field.toGenericString() + " = " + getValue(collector, field, null));
 		} catch (IllegalArgumentException e) {
-			LOG.debug("Cannot get " + field.toGenericString() + ": IllegalArgumentException ->" + e.getMessage());
+			LOG.debug("Cannot set " + field.toGenericString() + ": IllegalArgumentException -> " + e.getMessage());
 		} catch (IllegalAccessException e) {
-			LOG.debug("Cannot get " + field.toGenericString() + ": IllegalAccessException ->" + e.getMessage());
+			LOG.debug("Cannot set " + field.toGenericString() + ": IllegalAccessException -> " + e.getMessage());
 		}
-		return result != null ? result : "";
 	}
 
-	private String normalizeFieldsetName(String name) {
-		String id = name.replaceAll("[^a-zA-Z_]", "").trim();
-		if (id.length() == 0) {
-			id = "fs" + name.hashCode();
-		}
-		return id;
-	}
-
-	private Fieldset getOrCreate(Map<String, Fieldset> fieldsets, String name) {
+	private Fieldset getOrCreateFieldset(String name) {
 		Fieldset fieldset = fieldsets.get(name);
 		if (fieldset == null) {
 			fieldset = new Fieldset(name);
 			fieldsets.put(fieldset.getName(), fieldset);
 		}
 		return fieldset;
-	}
-
-	private Color getColor(Iterable<MessageDto> messages, Color defaultColor) {
-		Color color = defaultColor;
-		if (messages != null) {
-			for (MessageDto messageDto : messages) {
-				if (messageDto.getType() == MessageDto.MessageType.ERROR) {
-					color = Color.RED;
-					break;
-				} else if (messageDto.getType() == MessageDto.MessageType.WARN) {
-					color = Color.ORANGE;
-				} else if (messageDto.getType() == MessageDto.MessageType.SUCCESS) {
-					if (!"warning".equals(color)) {
-						color = Color.GREEN;
-					}
-				} else if (messageDto.getType() == MessageDto.MessageType.INFO) {
-					if (!"success".equals(color) && !"warning".equals(color)) {
-						color = Color.CYAN;
-					}
-				}
-			}
-		}
-		return color;
 	}
 
 	private void addAlerts(JPanel panel, ResourceBundle bundle, Iterable<MessageDto> messages) {
@@ -448,12 +340,19 @@ public class SettingsDialog extends JDialog {
 		}
 	}
 
-	private InputElement generateInputBoolean(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
-			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
+	private InputElement generateInputBoolean(final ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle,
+			Iterable<MessageDto> messages) {
 
 		JCheckBox checkBox = new JCheckBox(getMessage(bundle, "form.label." + field.getName()));
-		checkBox.setSelected(String.valueOf(getHtmlGetterValue(collector, field)).equals("true"));
+		checkBox.setSelected(getValue(collector, field, false));
 		checkBox.setForeground(getColor(messages, Color.BLACK));
+		checkBox.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				setValue(collector, field, ((JCheckBox) e.getSource()).isSelected());
+			}
+		});
 
 		InputElement element = new InputElement(checkBox);
 		element.setLabel(new JLabel(""));
@@ -461,13 +360,38 @@ public class SettingsDialog extends JDialog {
 		return element;
 	}
 
-	private InputElement generateInputInt(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private InputElement generateInputInt(final ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle,
 			Iterable<MessageDto> messages) {
 
-		JTextField textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
+		JTextField textField = new JTextField(getValue(collector, field, 0));
 		textField.setBackground(Color.WHITE);
 		textField.setColumns(10);
 		textField.setForeground(getColor(messages, Color.BLACK));
+		textField.getDocument().addDocumentListener(new DocumentListener() {
+
+			private void update(DocumentEvent e) {
+				try {
+					setValue(collector, field, Integer.parseInt(e.getDocument().getText(0, e.getDocument().getLength())));
+				} catch (BadLocationException e1) {
+					e1.printStackTrace();
+				}
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e) {
+				update(e);
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e) {
+				update(e);
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e) {
+				update(e);
+			}
+		});
 
 		InputElement element = new InputElement(textField);
 		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
@@ -475,15 +399,14 @@ public class SettingsDialog extends JDialog {
 		return element;
 	}
 
-	private InputElement generateInputEnum(ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle,
-			Map<String, Fieldset> fieldsets, Iterable<MessageDto> messages) {
+	private InputElement generateInputEnum(final ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
 		
 		final JPanel panel = new JPanel(new GridLayout(field.getType().getEnumConstants().length, 1));
 		ButtonGroup group = new ButtonGroup();
 		int rowIndex = 2;
 		for (final Object enumConstant : field.getType().getEnumConstants()) {
 			JRadioButton jRadioButton = new JRadioButton(getMessage(bundle, "form.label." + field.getName() + "." + enumConstant.toString()));
-			Fieldset fieldset = getOrCreate(fieldsets, normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()));
+			Fieldset fieldset = getOrCreateFieldset(normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()));
 			try {
 				field.setAccessible(true);
 				if (enumConstant.equals(field.get(collector))) {
@@ -511,6 +434,7 @@ public class SettingsDialog extends JDialog {
 						}
 					}
 					showFieldSet(normalizeFieldsetName(field.getName() + "_" + enumConstant.toString()), true);
+					setValue(collector, field, enumConstant);
 				}
 			});
 		}
@@ -521,16 +445,41 @@ public class SettingsDialog extends JDialog {
 		return element;
 	}
 
-	private InputElement generateInputString(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
+	private InputElement generateInputString(final ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
 
 		JTextField textField;
 		if (inputAnnotation.password()) {
 			textField = new JPasswordField();
 		} else {
-			textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
+			textField = new JTextField(getValue(collector, field, ""));
 		}
 		textField.setBackground(Color.WHITE);
 		textField.setForeground(getColor(messages, Color.BLACK));
+		textField.getDocument().addDocumentListener(new DocumentListener() {
+
+			private void update(DocumentEvent e) {
+				try {
+					setValue(collector, field, e.getDocument().getText(0, e.getDocument().getLength()));
+				} catch (BadLocationException e1) {
+					e1.printStackTrace();
+				}
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e) {
+				update(e);
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e) {
+				update(e);
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e) {
+				update(e);
+			}
+		});
 
 		InputElement element = new InputElement(textField);
 		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
@@ -538,20 +487,44 @@ public class SettingsDialog extends JDialog {
 		return element;
 	}
 
-	private InputElement generateInputChar(ICollectorPlugin collector, Field field, Input inputAnnotation, ResourceBundle bundle,
+	private InputElement generateInputChar(final ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle,
 			Iterable<MessageDto> messages) {
 
-		JTextField textField = new JTextField(String.valueOf(getHtmlGetterValue(collector, field)));
+		JTextField textField = new JTextField(this.<Character>getValue(collector, field, null));
 		textField.setBackground(Color.WHITE);
 		textField.setForeground(getColor(messages, Color.BLACK));
+		textField.getDocument().addDocumentListener(new DocumentListener() {
 
+			private void update(DocumentEvent e) {
+				try {
+					setValue(collector, field, e.getDocument().getText(0, e.getDocument().getLength()));
+				} catch (BadLocationException e1) {
+					e1.printStackTrace();
+				}
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e) {
+				update(e);
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e) {
+				update(e);
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e) {
+				update(e);
+			}
+		});
 		InputElement element = new InputElement(textField);
 		element.setLabel(new JLabel(getMessage(bundle, "form.label." + field.getName())));
 		element.setTooltip(new JLabel(getMessage(bundle, "form.tooltip." + field.getName(), null)));
 		return element;
 	}
 
-	private InputElement generateInputFile(Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
+	private InputElement generateInputFile(final ICollectorPlugin collector, final Field field, Input inputAnnotation, ResourceBundle bundle, Iterable<MessageDto> messages) {
 
 		JButton btnBrowse = new JButton("Browse");
 		btnBrowse.addActionListener(new ActionListener() {
@@ -564,7 +537,7 @@ public class SettingsDialog extends JDialog {
 				chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 				int returnVal = chooser.showOpenDialog(getContentPane());
 				if (returnVal == JFileChooser.APPROVE_OPTION) {
-					// TODO
+					setValue(collector, field, chooser.getSelectedFile());
 				}
 			}
 		});
@@ -586,7 +559,7 @@ public class SettingsDialog extends JDialog {
 		return element;
 	}
 
-	private String getMessage(ResourceBundle bundle, String key, String defaultValue) {
+	private static String getMessage(ResourceBundle bundle, String key, String defaultValue) {
 		String msg = "";
 		try {
 			msg = bundle.getString(key);
@@ -596,20 +569,39 @@ public class SettingsDialog extends JDialog {
 		return msg;
 	}
 
-	private String getMessage(ResourceBundle bundle, String key) {
+	private static String getMessage(ResourceBundle bundle, String key) {
 		return getMessage(bundle, key, "???" + key + "???");
 	}
 
-	public boolean hasFileInput(ICollectorPlugin collector) {
-		for (Field field : collector.getClass().getDeclaredFields()) {
-			Input inputAnnotation = field.getAnnotation(Input.class);
-			if (inputAnnotation != null) {
-				if (field.getType() == File.class) {
-					return true;
+	private static String normalizeFieldsetName(String name) {
+		String id = name.replaceAll("[^a-zA-Z_]", "").trim();
+		if (id.length() == 0) {
+			id = "fs" + name.hashCode();
+		}
+		return id;
+	}
+
+	private static Color getColor(Iterable<MessageDto> messages, Color defaultColor) {
+		Color color = defaultColor;
+		if (messages != null) {
+			for (MessageDto messageDto : messages) {
+				if (messageDto.getType() == MessageDto.MessageType.ERROR) {
+					color = Color.RED;
+					break;
+				} else if (messageDto.getType() == MessageDto.MessageType.WARN) {
+					color = Color.ORANGE;
+				} else if (messageDto.getType() == MessageDto.MessageType.SUCCESS) {
+					if (!"warning".equals(color)) {
+						color = Color.GREEN;
+					}
+				} else if (messageDto.getType() == MessageDto.MessageType.INFO) {
+					if (!"success".equals(color) && !"warning".equals(color)) {
+						color = Color.CYAN;
+					}
 				}
 			}
 		}
-		return false;
+		return color;
 	}
 
 }
