@@ -7,6 +7,9 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.ServiceLoader;
 
 import javax.swing.GroupLayout;
@@ -19,14 +22,24 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableModel;
 
 import com.tibudget.api.ICollectorPlugin;
+import com.tibudget.api.exceptions.AccessDeny;
+import com.tibudget.api.exceptions.CollectError;
+import com.tibudget.api.exceptions.ConnectionFailure;
+import com.tibudget.api.exceptions.ParameterError;
+import com.tibudget.api.exceptions.TemporaryUnavailable;
+import com.tibudget.dto.BankAccountDto;
+import com.tibudget.dto.BankOperationDto;
 
 public class CollectorTestApplication {
 
 	private JFrame frmTibudgetTestApplication;
 	private JTable accountsTable;
 	private JTable operationsTable;
+	private DefaultTableModel accountsTableModel, operationsTableModel; 
 	private JTextArea console;
 	private JButton btnOpen;
 	private JButton btnReload;
@@ -85,23 +98,35 @@ public class CollectorTestApplication {
 		btnReload.setEnabled(false);
 		btnReload.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				btnReloadActionPerformed(e);
 			}
 		});
 		
 		btnSettings = new JButton("Settings");
+		btnSettings.setEnabled(false);
 		btnSettings.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				btnSettingsActionPerformed(e);
 			}
 		});
-		btnSettings.setEnabled(false);
-		
-		accountsTable = new JTable();
-		
-		operationsTable = new JTable();
 		
 		btnRun = new JButton("Run");
 		btnRun.setEnabled(false);
+		btnRun.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				btnRunActionPerformed(e);
+			}
+		});
+		
+		accountsTable = new JTable();
+		accountsTableModel = new DefaultTableModel(0, 2);
+		accountsTableModel.setColumnIdentifiers(new Object[] {"Account", "Balance"});
+		accountsTable.setModel(accountsTableModel);
+		
+		operationsTable = new JTable();
+		operationsTableModel = new DefaultTableModel(0, 5);
+		operationsTableModel.setColumnIdentifiers(new Object[] {"Type", "Date op", "Date value", "Label", "Amount"});
+		operationsTable.setModel(operationsTableModel);
 		
 		progressBar = new JProgressBar();
 		GroupLayout groupLayout = new GroupLayout(frmTibudgetTestApplication.getContentPane());
@@ -158,10 +183,58 @@ public class CollectorTestApplication {
 			loadPlugin(chooser.getSelectedFile());
 		}
 	}
+
+	private void btnReloadActionPerformed(ActionEvent evt) {
+		loadPlugin(pluginArchive);
+	}
+	
+	private void btnRunActionPerformed(ActionEvent evt) {
+		try {
+			
+			pluginInstance.collect(Collections.<BankAccountDto>emptyList());
+			
+			for (BankAccountDto account : pluginInstance.getBankAccounts()) {
+				accountsTableModel.addRow(new Object[] {account.getTitle(), account.getCurrentBalance()});
+			}
+			
+			for (BankOperationDto operation : pluginInstance.getBankOperations()) {
+				operationsTableModel.addRow(new Object[] {
+					operation.getType(),
+					operation.getDateOperation(), 
+					operation.getDateValue(),
+					operation.getLabel(),
+					operation.getValue()
+				});
+			}
+
+		} catch (CollectError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (AccessDeny e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (TemporaryUnavailable e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ConnectionFailure e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ParameterError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	
 	private void btnSettingsActionPerformed(java.awt.event.ActionEvent evt) {
 		if (pluginInstance != null) {
 			SettingsDialog settingsDialog = new SettingsDialog(pluginInstance);
+			settingsDialog.setListener(new SettingsDialog.SettingsChangeListener() {
+				
+				@Override
+				public void onValueChange(boolean pluginInstanceValidated) {
+					btnRun.setEnabled(pluginInstanceValidated);
+				}
+			});
 			settingsDialog.setVisible(true);
 		}
 	}
@@ -186,6 +259,7 @@ public class CollectorTestApplication {
 			// Clear console
 			console.setText("");
 		}
+		btnReload.setEnabled(isValid);
 		return isValid;
 	}
 

@@ -22,6 +22,7 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 import javax.swing.ButtonGroup;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -32,6 +33,7 @@ import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JRadioButton;
 import javax.swing.JTextField;
+import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -56,6 +58,10 @@ import com.tibudget.dto.MessageDto;
 import com.tibudget.dto.MessagesDto;
 
 public class SettingsDialog extends JDialog {
+	
+	static interface SettingsChangeListener {
+		void onValueChange(boolean pluginInstanceValidated);
+	}
 
 	private static final long serialVersionUID = 1L;
 
@@ -65,6 +71,12 @@ public class SettingsDialog extends JDialog {
 	
 	private final ICollectorPlugin pluginInstance;
 
+	private JPanel messagesPanel;
+	
+	private ResourceBundle bundle;
+	
+	private SettingsChangeListener listener = null;
+	
 	/**
 	 * Launch the application.
 	 */
@@ -94,7 +106,10 @@ public class SettingsDialog extends JDialog {
 
 				@Override
 				public Collection<MessageDto> validate() {
-					return null;
+					List<MessageDto> messages = new ArrayList<MessageDto>(2);
+					messages.add(new MessageDto("Une erreur"));
+					messages.add(new MessageDto("Une autre erreur"));
+					return messages;
 				}
 				
 				@Override
@@ -135,14 +150,19 @@ public class SettingsDialog extends JDialog {
 	public SettingsDialog(final ICollectorPlugin pluginInstance) {
 		this.pluginInstance = pluginInstance;
 		setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+		setModal(true);
 		setBounds(100, 100, 450, 300);
 		
 		getContentPane().setLayout(new BorderLayout());
+		
+		messagesPanel = new JPanel(); 
+		messagesPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+		getContentPane().add(messagesPanel, BorderLayout.NORTH);
+
 		JPanel contentPanel = new JPanel(); 
 		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
 		getContentPane().add(contentPanel, BorderLayout.CENTER);
 
-		ResourceBundle bundle;
 		try {
 			bundle = ResourceBundle.getBundle("messages", Locale.ENGLISH, this.pluginInstance.getClass().getClassLoader());
 		}
@@ -158,29 +178,45 @@ public class SettingsDialog extends JDialog {
 		buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
 		getContentPane().add(buttonPane, BorderLayout.SOUTH);
 		
-		JButton okButton = new JButton("OK");
-		okButton.setActionCommand("OK");
+		JButton okButton = new JButton("Validate and close");
 		okButton.addActionListener(new ActionListener() {
 			
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				validatePluginInstance();
+				if (validatePluginInstance()) {
+					setVisible(false);
+					if (listener != null) {
+						listener.onValueChange(true);
+					}
+				}
 			}
 		});
 		buttonPane.add(okButton);
 		getRootPane().setDefaultButton(okButton);
-		JButton cancelButton = new JButton("Cancel");
-		cancelButton.setActionCommand("Cancel");
-		buttonPane.add(cancelButton);
 
 		pack();
 	}
 	
-	public void validatePluginInstance() {
-		Collection<MessageDto> msg = pluginInstance.validate();
-		for (MessageDto messageDto : msg) {
-			
+	public boolean validatePluginInstance() {
+		java.net.URL imgURL = getClass().getResource("/img/warning.gif");
+		ImageIcon icon = new ImageIcon(imgURL);
+		Collection<MessageDto> messages = pluginInstance.validate();
+		messagesPanel.setLayout(new GridLayout(0, 1, 0, 5));
+		messagesPanel.removeAll();
+		if (messages == null) {
+			messagesPanel.add(new JLabel("validate() MUST NOT return null, return empty collection if there is no error!", icon, SwingConstants.LEFT));
 		}
+		else if (messages.isEmpty()) {
+			return true;
+		}
+		else {
+			for (MessageDto message : messages) {
+				messagesPanel.add(new JLabel(MessageFormat.format(getMessage(bundle, message.getMessageKey()), message.getMessageArguments()), icon, SwingConstants.LEFT));
+			}
+		}
+		revalidate();
+		pack();
+		return false;
 	}
 
 	public Component generateForm(String id, ICollectorPlugin collector, ResourceBundle bundle, MessagesDto messages,
@@ -602,6 +638,10 @@ public class SettingsDialog extends JDialog {
 			}
 		}
 		return color;
+	}
+
+	public void setListener(SettingsChangeListener listener) {
+		this.listener = listener;
 	}
 
 }
