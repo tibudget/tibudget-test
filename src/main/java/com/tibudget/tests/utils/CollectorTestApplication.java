@@ -1,5 +1,6 @@
 package com.tibudget.tests.utils;
 
+import java.awt.Color;
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -7,9 +8,11 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.ServiceLoader;
 
 import javax.swing.GroupLayout;
@@ -18,12 +21,16 @@ import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.tibudget.api.ICollectorPlugin;
 import com.tibudget.api.exceptions.AccessDeny;
@@ -35,6 +42,8 @@ import com.tibudget.dto.BankAccountDto;
 import com.tibudget.dto.BankOperationDto;
 
 public class CollectorTestApplication {
+
+	private static Logger LOG = LoggerFactory.getLogger(CollectorTestApplication.class);
 
 	private JFrame frmTibudgetTestApplication;
 	private JTable accountsTable;
@@ -118,17 +127,31 @@ public class CollectorTestApplication {
 			}
 		});
 		
+		AmountRenderer amountRenderer = new AmountRenderer();
+		DateRenderer dateRenderer = new DateRenderer();
+		
 		accountsTable = new JTable();
 		accountsTableModel = new DefaultTableModel(0, 2);
 		accountsTableModel.setColumnIdentifiers(new Object[] {"Account", "Balance"});
 		accountsTable.setModel(accountsTableModel);
+		JScrollPane accountsScrollPane = new JScrollPane(accountsTable);
+		accountsTable.setFillsViewportHeight(true);
+		accountsTable.getColumn("Balance").setCellRenderer(amountRenderer);
 		
 		operationsTable = new JTable();
 		operationsTableModel = new DefaultTableModel(0, 5);
 		operationsTableModel.setColumnIdentifiers(new Object[] {"Type", "Date op", "Date value", "Label", "Amount"});
 		operationsTable.setModel(operationsTableModel);
+		JScrollPane operationsScrollPane = new JScrollPane(operationsTable);
+		operationsTable.setFillsViewportHeight(true);
+		operationsTable.getColumn("Date op").setCellRenderer(dateRenderer);
+		operationsTable.getColumn("Date value").setCellRenderer(dateRenderer);
+		operationsTable.getColumn("Amount").setCellRenderer(amountRenderer);
 		
 		progressBar = new JProgressBar();
+		progressBar.setMinimum(0);
+		progressBar.setMaximum(100);
+
 		GroupLayout groupLayout = new GroupLayout(frmTibudgetTestApplication.getContentPane());
 		groupLayout.setHorizontalGroup(
 			groupLayout.createParallelGroup(Alignment.LEADING)
@@ -147,9 +170,9 @@ public class CollectorTestApplication {
 							.addPreferredGap(ComponentPlacement.RELATED)
 							.addComponent(progressBar, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
 						.addGroup(groupLayout.createSequentialGroup()
-							.addComponent(accountsTable, GroupLayout.DEFAULT_SIZE, 119, Short.MAX_VALUE)
+							.addComponent(accountsScrollPane, GroupLayout.DEFAULT_SIZE, 119, Short.MAX_VALUE)
 							.addPreferredGap(ComponentPlacement.RELATED)
-							.addComponent(operationsTable, GroupLayout.DEFAULT_SIZE, 289, Short.MAX_VALUE)))
+							.addComponent(operationsScrollPane, GroupLayout.DEFAULT_SIZE, 289, Short.MAX_VALUE)))
 					.addGap(8))
 		);
 		groupLayout.setVerticalGroup(
@@ -164,15 +187,15 @@ public class CollectorTestApplication {
 						.addComponent(btnRun, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
 					.addPreferredGap(ComponentPlacement.UNRELATED)
 					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
-						.addComponent(accountsTable, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE)
-						.addComponent(operationsTable, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE))
+						.addComponent(accountsScrollPane, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE)
+						.addComponent(operationsScrollPane, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE))
 					.addPreferredGap(ComponentPlacement.RELATED)
 					.addComponent(console, GroupLayout.DEFAULT_SIZE, 45, Short.MAX_VALUE)
 					.addContainerGap())
 		);
 		frmTibudgetTestApplication.getContentPane().setLayout(groupLayout);
 	}
-
+	
 	private void btnOpenActionPerformed(ActionEvent evt) {
 		JFileChooser chooser = new JFileChooser();
 		FileNameExtensionFilter filter = new FileNameExtensionFilter("Jar files", "jar");
@@ -189,42 +212,102 @@ public class CollectorTestApplication {
 	}
 	
 	private void btnRunActionPerformed(ActionEvent evt) {
-		try {
-			
-			pluginInstance.collect(Collections.<BankAccountDto>emptyList());
-			
-			for (BankAccountDto account : pluginInstance.getBankAccounts()) {
-				accountsTableModel.addRow(new Object[] {account.getTitle(), account.getCurrentBalance()});
-			}
-			
-			for (BankOperationDto operation : pluginInstance.getBankOperations()) {
-				operationsTableModel.addRow(new Object[] {
-					operation.getType(),
-					operation.getDateOperation(), 
-					operation.getDateValue(),
-					operation.getLabel(),
-					operation.getValue()
-				});
-			}
+		Runnable collectRun = new Runnable() {
+			public void run() {
+				try {
+					btnRun.setEnabled(false);
+					btnOpen.setEnabled(false);
+					btnReload.setEnabled(false);
+					btnSettings.setEnabled(false);
+					
+					List<BankAccountDto> accounts = new ArrayList<BankAccountDto>();
+					if (pluginInstance.getBankAccounts() != null) {
+						for (BankAccountDto account : pluginInstance.getBankAccounts()) {
+							accounts.add(account);
+						}
+					}
 
-		} catch (CollectError e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (AccessDeny e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (TemporaryUnavailable e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ConnectionFailure e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ParameterError e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+					pluginInstance.collect(accounts);
+					
+					btnRun.setEnabled(true);
+					btnOpen.setEnabled(true);
+					btnReload.setEnabled(true);
+					btnSettings.setEnabled(true);
+
+				} catch (CollectError e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (AccessDeny e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (TemporaryUnavailable e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (ConnectionFailure e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (ParameterError e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		};
+
+		final Thread collectThread = new Thread(collectRun);
+
+		Runnable collectDisplay = new Runnable() {
+			public void run() {
+				
+				progressBar.setValue(0);
+				progressBar.setIndeterminate(true);
+				progressBar.setStringPainted(true);
+
+				while (collectThread.isAlive()) {
+					progressBar.setValue(pluginInstance.getProgress());
+					progressBar.setIndeterminate(false);
+					try {
+						Thread.sleep(250);
+					} catch (InterruptedException e) {
+						// ignore
+					}
+				}
+
+				progressBar.setValue(pluginInstance.getProgress());
+
+				for (BankAccountDto account : pluginInstance.getBankAccounts()) {
+					// Find account in already fetched accounts
+					int rowIndex = -1;
+					for (int i = 0; i < accountsTableModel.getRowCount(); i++) {
+						Object name = accountsTableModel.getValueAt(i, 0);
+						if (name != null && name.equals(account.getTitle())) {
+							rowIndex = i;
+							break;
+						}
+					}
+					if (rowIndex < 0) {
+						// Add account if not already in the list
+						accountsTableModel.addRow(new Object[] {account.getTitle(), account.getCurrentBalance()});
+					}
+					else {
+						// Update account balance if already in the list
+						accountsTableModel.setValueAt(account.getCurrentBalance(), rowIndex, 1);
+					}
+				}
+
+				for (BankOperationDto operation : pluginInstance.getBankOperations()) {
+					operationsTableModel.addRow(new Object[] { operation.getType(),
+							operation.getDateOperation(), operation.getDateValue(),
+							operation.getLabel(), operation.getValue() });
+				}
+			}
+		};
+
+		final Thread displayThread = new Thread(collectDisplay);
+
+		collectThread.start();
+		displayThread.start();
 	}
-	
+
 	private void btnSettingsActionPerformed(java.awt.event.ActionEvent evt) {
 		if (pluginInstance != null) {
 			SettingsDialog settingsDialog = new SettingsDialog(pluginInstance);
@@ -258,6 +341,22 @@ public class CollectorTestApplication {
 
 			// Clear console
 			console.setText("");
+			
+			// Clear tables
+			int rowCount = accountsTableModel.getRowCount();
+			//Remove rows one by one from the end of the table
+			for (int i = rowCount - 1; i >= 0; i--) {
+				accountsTableModel.removeRow(i);
+			}
+			rowCount = operationsTableModel.getRowCount();
+			//Remove rows one by one from the end of the table
+			for (int i = rowCount - 1; i >= 0; i--) {
+				operationsTableModel.removeRow(i);
+			}
+			
+			// Clear progress bar
+			progressBar.setValue(0);
+			progressBar.setStringPainted(false);
 		}
 		btnReload.setEnabled(isValid);
 		return isValid;
@@ -271,5 +370,50 @@ public class CollectorTestApplication {
 	public URLClassLoader getPluginClassLoader() throws MalformedURLException {
 		URLClassLoader classLoader = new URLClassLoader(new URL[]{pluginArchive.toURI().toURL()}, this.getClass().getClassLoader());
 		return classLoader;
+	}
+	
+	static class DateRenderer extends DefaultTableCellRenderer {
+
+		private static final long serialVersionUID = 1L;
+		
+		SimpleDateFormat formatter;
+	    
+		public DateRenderer() { super(); }
+
+	    public void setValue(Object value) {
+	        if (formatter==null) {
+	            formatter = new SimpleDateFormat("yyyy - MM - dd");
+	        }
+	        setText((value == null) ? "" : formatter.format(value));
+	    }
+	}
+	
+	static class AmountRenderer extends DefaultTableCellRenderer {
+
+		private static final long serialVersionUID = 1L;
+		
+		NumberFormat formatter;
+	    
+		public AmountRenderer() { super(); }
+
+	    public void setValue(Object value) {
+	        if (formatter==null) {
+	        	formatter = NumberFormat.getCurrencyInstance(Locale.getDefault());
+	        }
+	        if (value instanceof Double) {
+		        Double amount = (Double) value;
+		        setText((value == null) ? "" : formatter.format(amount));
+		        setHorizontalAlignment(RIGHT);
+		        if (amount < 0.0) {
+		        	setForeground(Color.RED);
+		        }
+		        else {
+		        	setForeground(new Color(0, 83, 0));
+		        }
+	        }
+	        else {
+	        	setText(String.valueOf(value));
+	        }
+	    }
 	}
 }
