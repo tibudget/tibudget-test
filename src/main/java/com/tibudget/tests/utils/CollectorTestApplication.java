@@ -8,11 +8,8 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.text.NumberFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.ServiceLoader;
 
 import javax.swing.GroupLayout;
@@ -24,10 +21,11 @@ import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextPane;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.text.JTextComponent;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,7 +93,11 @@ public class CollectorTestApplication {
 		frmTibudgetTestApplication.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
 		console = new JTextArea();
-		
+		JScrollPane scrollConsole = new JScrollPane(console);
+		MessageConsole msgConsole = new MessageConsole(console);
+		msgConsole.redirectOut();
+		msgConsole.redirectErr(Color.RED, null);
+        
 		btnOpen = new JButton("Open");
 		btnOpen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -158,7 +160,7 @@ public class CollectorTestApplication {
 				.addGroup(groupLayout.createSequentialGroup()
 					.addContainerGap()
 					.addGroup(groupLayout.createParallelGroup(Alignment.LEADING)
-						.addComponent(console, GroupLayout.DEFAULT_SIZE, 414, Short.MAX_VALUE)
+						.addComponent(scrollConsole, GroupLayout.DEFAULT_SIZE, 414, Short.MAX_VALUE)
 						.addGroup(groupLayout.createSequentialGroup()
 							.addComponent(btnOpen)
 							.addPreferredGap(ComponentPlacement.RELATED)
@@ -190,7 +192,7 @@ public class CollectorTestApplication {
 						.addComponent(accountsScrollPane, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE)
 						.addComponent(operationsScrollPane, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE))
 					.addPreferredGap(ComponentPlacement.RELATED)
-					.addComponent(console, GroupLayout.DEFAULT_SIZE, 45, Short.MAX_VALUE)
+					.addComponent(scrollConsole, GroupLayout.DEFAULT_SIZE, 45, Short.MAX_VALUE)
 					.addContainerGap())
 		);
 		frmTibudgetTestApplication.getContentPane().setLayout(groupLayout);
@@ -235,20 +237,15 @@ public class CollectorTestApplication {
 					btnSettings.setEnabled(true);
 
 				} catch (CollectError e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
 				} catch (AccessDeny e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
 				} catch (TemporaryUnavailable e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
 				} catch (ConnectionFailure e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
 				} catch (ParameterError e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
 				}
 			}
 		};
@@ -370,50 +367,5 @@ public class CollectorTestApplication {
 	public URLClassLoader getPluginClassLoader() throws MalformedURLException {
 		URLClassLoader classLoader = new URLClassLoader(new URL[]{pluginArchive.toURI().toURL()}, this.getClass().getClassLoader());
 		return classLoader;
-	}
-	
-	static class DateRenderer extends DefaultTableCellRenderer {
-
-		private static final long serialVersionUID = 1L;
-		
-		SimpleDateFormat formatter;
-	    
-		public DateRenderer() { super(); }
-
-	    public void setValue(Object value) {
-	        if (formatter==null) {
-	            formatter = new SimpleDateFormat("yyyy - MM - dd");
-	        }
-	        setText((value == null) ? "" : formatter.format(value));
-	    }
-	}
-	
-	static class AmountRenderer extends DefaultTableCellRenderer {
-
-		private static final long serialVersionUID = 1L;
-		
-		NumberFormat formatter;
-	    
-		public AmountRenderer() { super(); }
-
-	    public void setValue(Object value) {
-	        if (formatter==null) {
-	        	formatter = NumberFormat.getCurrencyInstance(Locale.getDefault());
-	        }
-	        if (value instanceof Double) {
-		        Double amount = (Double) value;
-		        setText((value == null) ? "" : formatter.format(amount));
-		        setHorizontalAlignment(RIGHT);
-		        if (amount < 0.0) {
-		        	setForeground(Color.RED);
-		        }
-		        else {
-		        	setForeground(new Color(0, 83, 0));
-		        }
-	        }
-	        else {
-	        	setText(String.valueOf(value));
-	        }
-	    }
 	}
 }
