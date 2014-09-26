@@ -14,11 +14,13 @@ import java.util.ServiceLoader;
 
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextPane;
@@ -89,10 +91,11 @@ public class CollectorTestApplication {
 	private void initialize() {
 		frmTibudgetTestApplication = new JFrame();
 		frmTibudgetTestApplication.setTitle("ti'Budget test application");
-		frmTibudgetTestApplication.setBounds(100, 100, 450, 300);
+		frmTibudgetTestApplication.setBounds(0, 0, 800, 600);
 		frmTibudgetTestApplication.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
-		console = new JTextArea();
+		console = new JTextArea(8, 0);
+		console.append("Welcome to the collector tester, please click Open to select your collector jar (with all dependencies) or directory");
 		JScrollPane scrollConsole = new JScrollPane(console);
 		MessageConsole msgConsole = new MessageConsole(console);
 		msgConsole.redirectOut();
@@ -153,6 +156,20 @@ public class CollectorTestApplication {
 		progressBar = new JProgressBar();
 		progressBar.setMinimum(0);
 		progressBar.setMaximum(100);
+		
+		JSplitPane horizSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+		horizSplit.setDividerSize(5);
+		horizSplit.setResizeWeight(0.3);
+		horizSplit.setBorder(null);
+		horizSplit.setLeftComponent(accountsScrollPane);
+		horizSplit.setRightComponent(operationsScrollPane);
+
+		JSplitPane vertSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+		vertSplit.setDividerSize(5);
+		vertSplit.setResizeWeight(0.7);
+		vertSplit.setBorder(null);
+		vertSplit.setTopComponent(horizSplit);
+		vertSplit.setBottomComponent(scrollConsole);
 
 		GroupLayout groupLayout = new GroupLayout(frmTibudgetTestApplication.getContentPane());
 		groupLayout.setHorizontalGroup(
@@ -160,7 +177,6 @@ public class CollectorTestApplication {
 				.addGroup(groupLayout.createSequentialGroup()
 					.addContainerGap()
 					.addGroup(groupLayout.createParallelGroup(Alignment.LEADING)
-						.addComponent(scrollConsole, GroupLayout.DEFAULT_SIZE, 414, Short.MAX_VALUE)
 						.addGroup(groupLayout.createSequentialGroup()
 							.addComponent(btnOpen)
 							.addPreferredGap(ComponentPlacement.RELATED)
@@ -170,12 +186,11 @@ public class CollectorTestApplication {
 							.addPreferredGap(ComponentPlacement.RELATED)
 							.addComponent(btnSettings)
 							.addPreferredGap(ComponentPlacement.RELATED)
-							.addComponent(progressBar, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-						.addGroup(groupLayout.createSequentialGroup()
-							.addComponent(accountsScrollPane, GroupLayout.DEFAULT_SIZE, 119, Short.MAX_VALUE)
-							.addPreferredGap(ComponentPlacement.RELATED)
-							.addComponent(operationsScrollPane, GroupLayout.DEFAULT_SIZE, 289, Short.MAX_VALUE)))
-					.addGap(8))
+							.addComponent(progressBar, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE, Short.MAX_VALUE)
+							.addGap(12))
+						.addGroup(Alignment.TRAILING, groupLayout.createSequentialGroup()
+							.addComponent(vertSplit, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE, Short.MAX_VALUE)
+							.addContainerGap())))
 		);
 		groupLayout.setVerticalGroup(
 			groupLayout.createParallelGroup(Alignment.LEADING)
@@ -188,11 +203,7 @@ public class CollectorTestApplication {
 						.addComponent(btnReload, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
 						.addComponent(btnRun, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
 					.addPreferredGap(ComponentPlacement.UNRELATED)
-					.addGroup(groupLayout.createParallelGroup(Alignment.BASELINE)
-						.addComponent(accountsScrollPane, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE)
-						.addComponent(operationsScrollPane, GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE))
-					.addPreferredGap(ComponentPlacement.RELATED)
-					.addComponent(scrollConsole, GroupLayout.DEFAULT_SIZE, 45, Short.MAX_VALUE)
+					.addComponent(vertSplit, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE, Short.MAX_VALUE)
 					.addContainerGap())
 		);
 		frmTibudgetTestApplication.getContentPane().setLayout(groupLayout);
@@ -225,16 +236,13 @@ public class CollectorTestApplication {
 					List<BankAccountDto> accounts = new ArrayList<BankAccountDto>();
 					if (pluginInstance.getBankAccounts() != null) {
 						for (BankAccountDto account : pluginInstance.getBankAccounts()) {
-							accounts.add(account);
+							if (account != null) {
+								accounts.add(account);
+							}
 						}
 					}
 
 					pluginInstance.collect(accounts);
-					
-					btnRun.setEnabled(true);
-					btnOpen.setEnabled(true);
-					btnReload.setEnabled(true);
-					btnSettings.setEnabled(true);
 
 				} catch (CollectError e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
@@ -246,6 +254,11 @@ public class CollectorTestApplication {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
 				} catch (ParameterError e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
+				} finally {
+					btnRun.setEnabled(true);
+					btnOpen.setEnabled(true);
+					btnReload.setEnabled(true);
+					btnSettings.setEnabled(true);
 				}
 			}
 		};
@@ -272,6 +285,10 @@ public class CollectorTestApplication {
 				progressBar.setValue(pluginInstance.getProgress());
 
 				for (BankAccountDto account : pluginInstance.getBankAccounts()) {
+					if (account == null) {
+						console.append("ERROR: your collector returned a null account in getBankAccounts()\n");
+						continue;
+					}
 					// Find account in already fetched accounts
 					int rowIndex = -1;
 					for (int i = 0; i < accountsTableModel.getRowCount(); i++) {
@@ -292,6 +309,10 @@ public class CollectorTestApplication {
 				}
 
 				for (BankOperationDto operation : pluginInstance.getBankOperations()) {
+					if (operation == null) {
+						console.append("ERROR: your collector returned a null operation in getBankOperations()\n");
+						continue;
+					}
 					operationsTableModel.addRow(new Object[] { operation.getType(),
 							operation.getDateOperation(), operation.getDateValue(),
 							operation.getLabel(), operation.getValue() });
