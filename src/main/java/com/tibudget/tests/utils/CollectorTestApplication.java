@@ -14,7 +14,6 @@ import java.util.ServiceLoader;
 
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -23,11 +22,9 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
-import javax.swing.JTextPane;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.text.JTextComponent;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -284,38 +281,48 @@ public class CollectorTestApplication {
 
 				progressBar.setValue(pluginInstance.getProgress());
 
-				for (BankAccountDto account : pluginInstance.getBankAccounts()) {
-					if (account == null) {
-						console.append("ERROR: your collector returned a null account in getBankAccounts()\n");
-						continue;
-					}
-					// Find account in already fetched accounts
-					int rowIndex = -1;
-					for (int i = 0; i < accountsTableModel.getRowCount(); i++) {
-						Object name = accountsTableModel.getValueAt(i, 0);
-						if (name != null && name.equals(account.getTitle())) {
-							rowIndex = i;
-							break;
+				if (pluginInstance.getBankAccounts() != null) {
+					for (BankAccountDto account : pluginInstance.getBankAccounts()) {
+						if (account == null) {
+							console.append("ERROR: your collector returned a null account in getBankAccounts()\n");
+							continue;
+						}
+						// Find account in already fetched accounts
+						int rowIndex = -1;
+						for (int i = 0; i < accountsTableModel.getRowCount(); i++) {
+							Object name = accountsTableModel.getValueAt(i, 0);
+							if (name != null && name.equals(account.getTitle())) {
+								rowIndex = i;
+								break;
+							}
+						}
+						if (rowIndex < 0) {
+							// Add account if not already in the list
+							accountsTableModel.addRow(new Object[] {account.getTitle(), account.getCurrentBalance()});
+						}
+						else {
+							// Update account balance if already in the list
+							accountsTableModel.setValueAt(account.getCurrentBalance(), rowIndex, 1);
 						}
 					}
-					if (rowIndex < 0) {
-						// Add account if not already in the list
-						accountsTableModel.addRow(new Object[] {account.getTitle(), account.getCurrentBalance()});
-					}
-					else {
-						// Update account balance if already in the list
-						accountsTableModel.setValueAt(account.getCurrentBalance(), rowIndex, 1);
-					}
+				}
+				else {
+					console.append("ERROR: your collector returned a null in getBankAccounts()\n");
 				}
 
-				for (BankOperationDto operation : pluginInstance.getBankOperations()) {
-					if (operation == null) {
-						console.append("ERROR: your collector returned a null operation in getBankOperations()\n");
-						continue;
+				if (pluginInstance.getBankOperations() != null) {
+					for (BankOperationDto operation : pluginInstance.getBankOperations()) {
+						if (operation == null) {
+							console.append("ERROR: your collector returned a null operation in getBankOperations()\n");
+							continue;
+						}
+						operationsTableModel.addRow(new Object[] { operation.getType(),
+								operation.getDateOperation(), operation.getDateValue(),
+								operation.getLabel(), operation.getValue() });
 					}
-					operationsTableModel.addRow(new Object[] { operation.getType(),
-							operation.getDateOperation(), operation.getDateValue(),
-							operation.getLabel(), operation.getValue() });
+				}
+				else {
+					console.append("ERROR: your collector returned a null in getBankOperations()\n");
 				}
 			}
 		};
