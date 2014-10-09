@@ -62,12 +62,16 @@ public class CollectorTestApplication {
 	/**
 	 * Launch the application.
 	 */
-	public static void main(String[] args) {
+	public static void main(final String[] args) {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
 					CollectorTestApplication window = new CollectorTestApplication();
 					window.frmTibudgetTestApplication.setVisible(true);
+					if (args.length > 0) {
+						LOG.info("Openning " + args[0]);
+						window.loadPlugin(new File(args[0]));
+					}
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -243,14 +247,19 @@ public class CollectorTestApplication {
 
 				} catch (CollectError e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
+					printStacktrace(e.getCause() != null ? e.getCause() : e);
 				} catch (AccessDeny e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
+					printStacktrace(e.getCause() != null ? e.getCause() : e);
 				} catch (TemporaryUnavailable e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
+					printStacktrace(e.getCause() != null ? e.getCause() : e);
 				} catch (ConnectionFailure e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
+					printStacktrace(e.getCause() != null ? e.getCause() : e);
 				} catch (ParameterError e) {
 					console.append("Exception "+e.getClass().getName() +" thrown: " + e.getMessage() + "\n");
+					printStacktrace(e.getCause() != null ? e.getCause() : e);
 				} finally {
 					btnRun.setEnabled(true);
 					btnOpen.setEnabled(true);
@@ -347,7 +356,7 @@ public class CollectorTestApplication {
 		}
 	}
 
-	private boolean loadPlugin(File archive) {
+	public boolean loadPlugin(File archive) {
 		boolean isValid = false;
 		pluginArchive = archive;
 		try {
@@ -393,7 +402,25 @@ public class CollectorTestApplication {
 	}
 
 	public URLClassLoader getPluginClassLoader() throws MalformedURLException {
-		URLClassLoader classLoader = new URLClassLoader(new URL[]{pluginArchive.toURI().toURL()}, this.getClass().getClassLoader());
+		URLClassLoader thisClassloader = (URLClassLoader)this.getClass().getClassLoader();
+		List<URL> urlsToKeep = new ArrayList<URL>();
+		for (URL url : thisClassloader.getURLs()) {
+			if (url.getFile().endsWith(".jar")) {
+				urlsToKeep.add(url);
+			}
+		}
+		urlsToKeep.add(pluginArchive.toURI().toURL());
+		for (URL url : urlsToKeep) {
+			LOG.info("Adding " + url.toString() + " to classpath");
+		}
+		URLClassLoader classLoader = new URLClassLoader(urlsToKeep.toArray(new URL[0]), getClass().getClassLoader());
 		return classLoader;
+	}
+	
+	public void printStacktrace(Throwable e) {
+		console.append(e.getClass().getName() + ": " + e.getMessage() + "\n");
+		for (StackTraceElement element : e.getStackTrace()) {
+			console.append("   " + element.toString() + "\n");
+		}
 	}
 }
