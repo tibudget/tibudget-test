@@ -356,11 +356,7 @@ public class CollectorTestApplication {
 		}
 	}
 
-<<<<<<< HEAD
 	public boolean loadPlugin(File archive) {
-=======
-	boolean loadPlugin(File archive) {
->>>>>>> 68ffea3b22cb6491f736191ba81d1c0d189352af
 		boolean isValid = false;
 		pluginArchive = archive;
 		try {
